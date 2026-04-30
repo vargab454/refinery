@@ -22,11 +22,38 @@ import io.codekontor.opencypher.xtext.OpenCypherStandaloneSetup
 import org.eclipse.xtext.util.Modules2
 
 /**
- * Initialization support for running Xtext languages as language servers.
+ * This class provides the initialization support required to run the openCypher
+ * language specifically in IDE-related environments, such as when operating
+ * as a Language Server.
+ * It extends the base standalone setup to ensure that all core language
+ * features are properly combined with UI/IDE enhancements.
  */
 class OpenCypherIdeSetup extends OpenCypherStandaloneSetup {
 
+	/**
+	 * Configures and creates the dependency injector used to manage the lifecycle
+	 * and wiring of the openCypher IDE components.
+	 * This method is called during the startup phase of the IDE or Language Server
+	 * to ensure all services (like content assist, syntax highlighting, and
+	 * grammar parsing) are correctly linked.
+	 *
+	 * @return A fully initialized injector ready to serve language components.
+	 */
 	override createInjector() {
+
+		/*
+		 * Modules2.mixin is a utility that merges multiple configuration modules
+		 * into one cohesive unit.
+		 *
+		 * 'new OpenCypherRuntimeModule()': Includes the base runtime logic,
+		 * such as the parser, lexer, and cross-reference resolutions.
+		 *
+		 * 'new OpenCypherIdeModule()': Includes the IDE-specific overrides,
+		 * such as custom content assist proposal providers.
+		 *
+		 * Finally, Guice.createInjector takes the mixed configuration to initialize
+		 * the entire dependency graph for the IDE.
+		 */
 		Guice.createInjector(Modules2.mixin(new OpenCypherRuntimeModule, new OpenCypherIdeModule))
 	}
 }
