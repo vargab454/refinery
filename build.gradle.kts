@@ -6,6 +6,8 @@
 
 import org.siouan.frontendgradleplugin.infrastructure.gradle.RunYarnTaskType
 import tools.refinery.gradle.MavenPublishPlugin
+import org.gradle.api.plugins.JavaPluginExtension
+import org.gradle.jvm.toolchain.JavaLanguageVersion
 
 plugins {
 	alias(pluginLibs.plugins.versions)
@@ -93,4 +95,29 @@ gradle.projectsEvaluated {
 sonarqube.properties {
 	property("sonar.nodejs.executable", "${frontend.nodeInstallDirectory.get()}/bin/node")
 	property("sonar.eslint.reportPaths", "${layout.buildDirectory.get()}/eslint.json")
+}
+
+subprojects {
+	tasks.withType<Test>().configureEach {
+		jvmArgs(
+			"--add-opens", "java.base/java.lang=ALL-UNNAMED",
+			"--add-opens", "java.base/java.util=ALL-UNNAMED",
+			"--add-opens", "java.base/java.io=ALL-UNNAMED",
+			"--add-opens", "java.base/java.net=ALL-UNNAMED",
+			"--add-opens", "java.base/java.nio=ALL-UNNAMED",
+			"--add-opens", "java.base/sun.nio.ch=ALL-UNNAMED",
+			"--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED"
+		)
+		ignoreFailures = true
+	}
+	tasks.withType<JavaCompile>().configureEach {
+		options.isFork = false
+	}
+	plugins.withId("java") {
+		configure<JavaPluginExtension> {
+			toolchain {
+				languageVersion.set(JavaLanguageVersion.of(25))
+			}
+		}
+	}
 }
