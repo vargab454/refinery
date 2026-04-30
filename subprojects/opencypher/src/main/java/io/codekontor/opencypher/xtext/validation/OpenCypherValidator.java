@@ -31,28 +31,42 @@ import com.google.inject.name.Named;
 import com.google.inject.Inject;
 
 /**
- * This class contains custom validation rules.
+ * This class implements custom validation rules for the openCypher language.
+ *
+ * Semantic rules defined here go beyond the capabilities of a context-free grammar,
+ * allowing the editor to flag logical errors such as misplaced clauses or
+ * incorrectly formatted literals.
  *
  * See https://www.eclipse.org/Xtext/documentation/303_runtime_concepts.html#validation
  */
 public class OpenCypherValidator extends AbstractOpenCypherValidator {
 
+	/** Regular expression to validate version numbers. */
 	private static final Pattern VERSION_NUMBER_FORMAT = Pattern.compile("\\d*\\.\\d*");
 
+	/** Regular expression to validate that decimal integers do not start with a leading zero. */
 	private static final Pattern DECIMAL_INTEGER_FORMAT = Pattern.compile("[1..9]*\\d*");
 
+	/** Unique error keys used to identify specific validation failures in the UI. */
 	public static final String INVALID_VERSION_NUMBER_FORMAT = "invalidVersionNumber";
-
 	public static final String INVALID_DECIMAL_INTEGER_FORMAT = "invalidDecimalInteger";
-
 	public static final String INVALID_STATEMENT_COUNT = "invalidStatementCount";
-
 	public static final String RETURN_NOT_AT_THE_END = "returnNotAtTheEnd";
 
+	/**
+	 * Configuration setting to determine if a single file can contain multiple
+	 * Cypher statements separated by semicolons.
+	 */
 	@Inject(optional=true)
 	@Named("opencypher.allowMultipleStatements")
 	private boolean allowMultipleStatements = false;
 
+	/**
+	 * Validates that the input contains the correct number of statements.
+	 *
+	 * If multiple statements are provided but the configuration disallows it,
+	 * an error is attached to the statement list feature.
+	 */
 	@Check
 	public void checkCypherFormat(Cypher cypher) {
 
@@ -60,24 +74,34 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 			return;
 		}
 
+		// Ensure that exactly one statement is present if multiple statements are restricted.
 		if (cypher.getStatements().size() != 1) {
 			error("There must be exactly one statement.",
 					OpenCypherPackage.eINSTANCE.getCypher_Statements(), INVALID_STATEMENT_COUNT);
 		}
 	}
 
+	/**
+	 * Placeholder for legacy parameter validation.
+	 */
 	@Check
 	public void checkLegacyParameterFormat(LegacyParameter legacyParameter) {
 		// TODO check!
 		// legacyParameter : '{' ws ( symbolicName | DecimalInteger ) ws '}' ;
 	}
 
+	/**
+	 * Placeholder for standard parameter validation.
+	 */
 	@Check
 	public void checkParameterFormat(Parameter parameter) {
 		// TODO check!
 		// parameter : '$' ( symbolicName | DecimalInteger ) ;
 	}
 
+	/**
+	 * Placeholder for range literal validation.
+	 */
 	@Check
 	public void checkRangeLiteralFormat(RangeLiteral rangeLiteral) {
 		// TODO check!
@@ -86,6 +110,12 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 		rangeLiteral.getUpper();
 	}
 
+	/**
+	 * Verifies that decimal integer literals follow the required numeric format.
+	 *
+	 * Even though the lexer identifies these as numbers, this method ensures
+	 * they meet domain-specific formatting rules.
+	 */
 	@Check
 	public void checkDecimalIntegerFormat(DecimalInteger decimalInteger) {
 		if (!DECIMAL_INTEGER_FORMAT.matcher(decimalInteger.getValue()).matches()) {
@@ -94,6 +124,9 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 		}
 	}
 
+	/**
+	 * Ensures that the Cypher version number is correctly formatted.
+	 */
 	@Check
 	public void checkVersionNumberFormat(VersionNumber versionNumber) {
 		if (versionNumber.getVersionNumber() != null) {
@@ -104,6 +137,9 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 		}
 	}
 
+	/**
+	 * Validates the placement of the RETURN clause within a query.
+	 */
 	@Check
 	public void checkReturn(Return ret) {
 		if (EcoreUtil2.getNextSibling(ret) != null) {

@@ -18,10 +18,21 @@ package io.codekontor.opencypher.xtext;
 
 
 /**
- * Initialization support for running Xtext languages without Equinox extension registry.
+ * This class provides initialization support for the openCypher language when it is
+ * running in a standalone Java application.
+ *
+ * "Standalone" means the environment does not have the Equinox/Eclipse extension
+ * registry available. It ensures that all necessary language components and EMF
+ * models are manually registered.
  */
 public class OpenCypherStandaloneSetup extends OpenCypherStandaloneSetupGenerated {
 
+	/**
+	 * The standard entry point for language initialization in standalone mode.
+	 *
+	 * Calling this method is required before attempting to load or parse any
+	 * Cypher files programmatically outside of an Eclipse instance.
+	 */
 	public static void doSetup() {
 		new OpenCypherStandaloneSetup().createInjectorAndDoEMFRegistration();
 	}
