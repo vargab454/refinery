@@ -29,29 +29,43 @@ import org.eclipse.xtext.scoping.IScope;
 import org.eclipse.xtext.scoping.Scopes;
 
 /**
- * Scope provider for the openCypher grammar.
+ * Main Scope provider for the openCypher grammar.
+ * It manages how variables are discovered and linked throughout a Cypher query.
  */
 public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 
+	/**
+	 * Entry point for scope resolution.
+	 */
 	@Override
 	public IScope getScope(EObject context, EReference reference) {
+		// Check if we are currently looking for the definition of a variable reference
 		if (context instanceof VariableRef && reference == OpenCypherPackage.Literals.VARIABLE_REF__VARIABLE_REF) {
+
+			// Collect declarations from three possible sources of variables in Cypher
 			Iterable<VariableDeclaration> elementsFromStatement = extractDeclarationsFromClauses(context);
 			Iterable<VariableDeclaration> elementsFromExpression = extractDeclarationsFromExpression(context);
 			Iterable<VariableDeclaration> elementsFromForeach = extractDeclarationsFromForeach(context);
 
+			// Merge all found declarations into a single list
 			List<VariableDeclaration> allElements = new ArrayList<>();
 			elementsFromExpression.forEach(allElements::add);
 			elementsFromForeach.forEach(allElements::add);
 			elementsFromStatement.forEach(allElements::add);
 
+			// Return a scope containing all valid variable definitions found
 			return Scopes.scopeFor(allElements);
 		}
 
+		// Fallback to default Xtext behavior for other types of references
 		return super.getScope(context, reference);
 	}
 
+	/**
+	 * Finds the top-level Statement and starts extracting variables defined in its various clauses.
+	 */
 	protected Iterable<VariableDeclaration> extractDeclarationsFromClauses(EObject context) {
+		// Traverse up the tree to find the root Statement object
 		Statement statement = EcoreUtil2.getAllContainers(context).stream()
 				.filter(Statement.class::isInstance)
 				.map(Statement.class::cast)
@@ -62,8 +76,12 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 		return extractDeclarationsFromStatement(statement, context);
 	}
 
+	/**
+	 * Differentiates between query types.
+	 */
 	protected Iterable<VariableDeclaration> extractDeclarationsFromStatement(EObject statement, EObject context) {
 		if (statement instanceof RegularQuery) {
+			// In a regular query, we find the clauses and filter based on where we are
 			RegularQuery regularQuery = (RegularQuery) statement;
 			Clause contextClause = EcoreUtil2.getContainerOfType(context, Clause.class);
 			SinglePartQuery spq = EcoreUtil2.getContainerOfType(context, SinglePartQuery.class);
@@ -84,6 +102,9 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 		return Collections.emptyList();
 	}
 
+	/**
+	 * Flattens a Query structure into a linear list of Clauses.
+	 */
 	protected List<? extends Clause> extractClauses(SingleQuery sq) {
 		if (sq instanceof SinglePartQuery) {
 			SinglePartQuery spq = (SinglePartQuery) sq;
@@ -103,6 +124,9 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 		return Collections.emptyList();
 	}
 
+	/**
+	 * Extracts clauses from a part of a multi-part query.
+	 */
 	protected List<? extends Clause> extractClausesFromMultiPartSubQuery(MultiPartSubQuery mpsq) {
 		List<Clause> clauses = new ArrayList<>();
 		clauses.addAll(mpsq.getReadingClauses());
@@ -111,6 +135,9 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 		return clauses;
 	}
 
+	/**
+	 * Determines which previous clauses are visible to the current position.
+	 */
 	protected Iterable<VariableDeclaration> extractDeclarationsFromClauseList(List<? extends Clause> clauses, Clause contextClause, EObject context) {
 		List<VariableDeclaration> elements = new ArrayList<>();
 		MergeAction mergeAction = EcoreUtil2.getContainerOfType(context, MergeAction.class);
@@ -140,6 +167,9 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 		return elements;
 	}
 
+	/**
+	 * Handles scoping for variables defined inside expressions.
+	 */
 	protected Iterable<VariableDeclaration> extractDeclarationsFromExpression(EObject context) {
 		Expression expression = EcoreUtil2.getContainerOfType(context.eContainer(), Expression.class);
 		if (expression == null) return Collections.emptyList();
@@ -156,6 +186,9 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 		return declarations;
 	}
 
+	/**
+	 * Extracts variables from specific Cypher expression.
+	 */
 	protected Iterable<VariableDeclaration> extractDeclarationsFromSingleExpression(Expression expression) {
 		FilterExpression filterExpression = extractFilterExpression(expression);
 
@@ -174,6 +207,9 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 		return Collections.emptyList();
 	}
 
+	/**
+	 * Helper to find filter expressions in various collection-based Cypher functions.
+	 */
 	protected FilterExpression extractFilterExpression(Expression e) {
 		if (e instanceof ListComprehension) return ((ListComprehension) e).getFilterExpression();
 		if (e instanceof Extract) return ((Extract) e).getFilterExpression();
@@ -185,6 +221,9 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 		return null;
 	}
 
+	/**
+	 * Handles variables defined within a FOREACH loop.
+	 */
 	protected Iterable<VariableDeclaration> extractDeclarationsFromForeach(EObject context) {
 		Foreach foreach = EcoreUtil2.getContainerOfType(context, Foreach.class);
 		if (foreach == null) return Collections.emptyList();
