@@ -16,6 +16,7 @@
  */
 package io.codekontor.opencypher.xtext.generator;
 
+import io.codekontor.opencypher.xtext.openCypher.*;
 import org.eclipse.emf.ecore.resource.Resource;
 import org.eclipse.xtext.generator.AbstractGenerator;
 import org.eclipse.xtext.generator.IFileSystemAccess2;
@@ -28,12 +29,75 @@ import org.eclipse.xtext.generator.IGeneratorContext;
  */
 public class OpenCypherGenerator extends AbstractGenerator {
 
+	/**
+	 * The main entry point for code generation. Triggered automatically on save.
+	 *
+	 * @param resource The EMF resource containing the parsed Cypher model.
+	 * @param fsa Access to the file system to write generated files.
+	 * @param context Information about the generation process.
+	 */
 	@Override
 	public void doGenerate(Resource resource, IFileSystemAccess2 fsa, IGeneratorContext context) {
-//		fsa.generateFile('greetings.txt', 'People to greet: ' +
-//			resource.allContents
-//				.filter(Greeting)
-//				.map[name]
-//				.join(', '))
+		// Validate that the resource is not empty and contains a Cypher root object
+		if (resource.getContents().isEmpty() || !(resource.getContents().get(0) instanceof Cypher)) return;
+		Cypher model = (Cypher) resource.getContents().get(0);
+		// Iterate through all statements in the file
+		model.getStatements().stream()
+				// Filter specifically for NodeTypeDefinitions
+				.filter(NodeTypeDefinition.class::isInstance)
+				.map(NodeTypeDefinition.class::cast)
+				.forEach(nodeType -> {
+					// Use the label name as the class name
+					String className = nodeType.getLabel().getLabelName();
+					// Generate the actual Java source code string
+					String content = generateJavaClass(nodeType);
+					// Save the generated string into a .java file
+					fsa.generateFile("generated/" + className + ".java", content);
+				});
+	}
+
+	/**
+	 * Builds the source code for a single Java class based on a NodeType definition.
+	 *
+	 * @param nodeType The model element representing the node definition.
+	 * @return A string containing the full source code of the Java class.
+	 */
+	private String generateJavaClass(NodeTypeDefinition nodeType) {
+		StringBuilder sb = new StringBuilder();
+		String className = nodeType.getLabel().getLabelName();
+		// Define the package and basic class structure
+		sb.append("package io.codekontor.generated;\n\n");
+		sb.append("public class ").append(className);
+		// Handle class inheritance if the 'extends' keyword was used
+		if (nodeType.getExtends() != null) sb.append(" extends ").append(nodeType.getExtends().getLabel().getLabelName());
+		sb.append(" {\n");
+		// Generate private fields for each property defined in the NodeType
+		if (nodeType.getProperties() != null) {
+			for (TypeProperty prop : nodeType.getProperties().getProperties()) {
+				// Use mapType to convert Cypher types to Java types
+				sb.append("    private ").append(mapType(prop.getType())).append(" ").append(prop.getName()).append(";\n");
+			}
+		}
+		sb.append("}\n");
+		return sb.toString();
+	}
+
+	/**
+	 * Maps Cypher-specific data types to their corresponding Java classes.
+	 *
+	 * @param cypherType The type name string from the DSL.
+	 * @return The canonical Java type name.
+	 */
+	private String mapType(String cypherType) {
+		// Fallback for untyped properties
+		if (cypherType == null) return "Object";
+		return switch (cypherType.toLowerCase()) {
+			case "int", "integer", "long" -> "Long";
+			case "float", "double", "real" -> "Double";
+			case "string", "text" -> "String";
+			case "boolean", "bool" -> "Boolean";
+			case "date" -> "java.time.LocalDate";
+			default -> "Object";
+		};
 	}
 }
