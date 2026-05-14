@@ -57,6 +57,17 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 			return Scopes.scopeFor(allElements);
 		}
 
+		// Handle references where the target type is a NodeTypeDefinition
+		if (reference.getEReferenceType().getInstanceClass() == NodeTypeDefinition.class) {
+			// Collect all NodeTypeDefinitions from the entire resource
+			List<NodeTypeDefinition> allTypes = EcoreUtil2.getAllContentsOfType(context.eResource().getContents().get(0), NodeTypeDefinition.class);
+			// Prevent self-inheritance
+			if (context instanceof NodeTypeDefinition) allTypes.remove(context);
+			// Create the scope using a custom name provider lambda.
+			// Since NodeTypeDefinition doesn't have a 'name' attribute, we explicitly map to the 'labelName' property within its 'label' object for linking.
+			return Scopes.scopeFor(allTypes, obj -> ((NodeTypeDefinition)obj).getLabel().getLabelName(), null);
+		}
+
 		// Fallback to default Xtext behavior for other types of references
 		return super.getScope(context, reference);
 	}

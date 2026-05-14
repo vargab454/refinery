@@ -45,13 +45,17 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 	private static final Pattern VERSION_NUMBER_FORMAT = Pattern.compile("\\d*\\.\\d*");
 
 	/** Regular expression to validate that decimal integers do not start with a leading zero. */
-	private static final Pattern DECIMAL_INTEGER_FORMAT = Pattern.compile("[1..9]*\\d*");
+	private static final Pattern DECIMAL_INTEGER_FORMAT = Pattern.compile("[1-9]*\\d*");
 
 	/** Unique error keys used to identify specific validation failures in the UI. */
 	public static final String INVALID_VERSION_NUMBER_FORMAT = "invalidVersionNumber";
 	public static final String INVALID_DECIMAL_INTEGER_FORMAT = "invalidDecimalInteger";
 	public static final String INVALID_STATEMENT_COUNT = "invalidStatementCount";
 	public static final String RETURN_NOT_AT_THE_END = "returnNotAtTheEnd";
+	public static final String CYCLIC_INHERITANCE = "cyclicInheritance";
+	public static final String DUPLICATE_NODE_TYPE = "duplicateNodeType";
+	public static final String DUPLICATE_PROPERTY = "duplicateProperty";
+	public static final String PROPERTY_SHADOWING = "propertyShadowing";
 
 	/**
 	 * Configuration setting to determine if a single file can contain multiple
@@ -146,5 +150,110 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 			error("RETURN can only be used once at the end of the query", ret,
 					OpenCypherPackage.eINSTANCE.getReturn_Return(), RETURN_NOT_AT_THE_END);
 		}
+	}
+
+	/**
+	 * Verifies that there are no cycles in the inheritance hierarchy of NodeTypes.
+	 * This prevents infinite loops when resolving properties or generating code.
+	 * Example error: (:A => :B) and (:B => :A)
+	 */
+	@Check
+	public void checkCyclicInheritance(NodeTypeDefinition nodeType) {
+		// If the node doesn't inherit from anything, a cycle is impossible
+		if (nodeType.getExtends() == null) return;
+		// Start checking from the immediate parent
+		NodeTypeDefinition current = nodeType.getExtends();
+		// Use a Set to keep track of visited types in the inheritance chain
+		java.util.Set<NodeTypeDefinition> visited = new java.util.HashSet<>();
+		// Add the current node to detect if we ever point back to it
+		visited.add(nodeType);
+		// Traverse up the inheritance tree
+		while (current != null) {
+			// If the parent we are looking at is already in our set, we found a cycle
+			if (visited.contains(current)) {
+				error("Cyclic inheritance detected: NodeType '" + nodeType.getLabel().getLabelName() + "' cannot inherit " +
+								"from itself through hierarchy.",
+						OpenCypherPackage.Literals.NODE_TYPE_DEFINITION__EXTENDS, CYCLIC_INHERITANCE);
+				return;
+			}
+			// Mark the current parent as visited
+			visited.add(current);
+			current = current.getExtends();
+		}
+	}
+
+	/**
+	 * Ensures that each NodeType label is unique within the scope of the entire file.
+	 * Duplicate labels would make it impossible to know which definition to use.
+	 */
+	@Check
+	public void checkUniqueNodeType(NodeTypeDefinition nodeType) {
+		// Retrieve the string value of the label
+		String name = nodeType.getLabel().getLabelName();
+		// Navigate to the root to search through the whole file
+		Cypher root = (Cypher) EcoreUtil2.getRootContainer(nodeType);
+		// Find all NodeTypeDefinitions in the file and count how many have the same label name
+		long count = EcoreUtil2.getAllContentsOfType(root, NodeTypeDefinition.class).stream()
+				.filter(nt -> nt.getLabel() != null && name.equals(nt.getLabel().getLabelName()))
+				.count();
+		// If more than one definition exists with this name, flag an error on the label
+		if (count > 1) error("NodeType '" + name + "' is already defined.",
+				OpenCypherPackage.Literals.NODE_TYPE_DEFINITION__LABEL, DUPLICATE_NODE_TYPE);
+	}
+
+	/**
+	 * Checks for duplicate property names within a single NodeType definition.
+	 * Example error: (:Person { name :: string, name :: int })
+	 */
+	@Check
+	public void checkUniqueProperties(TypePropertyMap map) {
+		// Set to store property names encountered within this specific map
+		java.util.Set<String> propertyNames = new java.util.HashSet<>();
+		for (TypeProperty prop : map.getProperties()) {
+			String name = prop.getName();
+			// If the name is already in the set, it's a duplicate within this type
+			if (propertyNames.contains(name)) error("Duplicate property '" + name + "' in type definition.", prop,
+					OpenCypherPackage.Literals.TYPE_PROPERTY__NAME, DUPLICATE_PROPERTY);
+			// Add the name to the set to check against subsequent properties
+			propertyNames.add(name);
+		}
+	}
+
+	/**
+	 * Warns if a NodeType redefines a property that already exists in its parent types.
+	 * This can lead to confusion in the data model.
+	 */
+	@Check
+	public void checkPropertyShadowing(NodeTypeDefinition nodeType) {
+		// Shadowing is only possible if there is a parent and the current node has properties
+		if (nodeType.getExtends() == null || nodeType.getProperties() == null) return;
+		// Use the helper method to get all property names from the entire parent hierarchy
+		java.util.Set<String> inheritedProperties = collectInheritedPropertyNames(nodeType.getExtends(), new java.util.HashSet<>());
+		// Check each local property against the inherited ones
+		for (TypeProperty prop : nodeType.getProperties().getProperties()) {
+			if (inheritedProperties.contains(prop.getName()))
+				warning("Property '" + prop.getName() + "' shadows a property defined in a parent type.", prop,
+						OpenCypherPackage.Literals.TYPE_PROPERTY__NAME, PROPERTY_SHADOWING);
+		}
+	}
+
+	/**
+	 * Recursive helper method to traverse the inheritance tree and collect all property names from all ancestors.
+	 *
+	 * @param nodeType The type to start collecting from
+	 * @param visited Set to prevent infinite recursion in case of cyclic inheritance
+	 * @return A set of all property names found in the hierarchy
+	 */
+	private java.util.Set<String> collectInheritedPropertyNames(NodeTypeDefinition nodeType, java.util.Set<NodeTypeDefinition> visited) {
+		java.util.Set<String> names = new java.util.HashSet<>();
+		// Base case for recursion: stop if node is null or we've already processed this type
+		if (nodeType == null || visited.contains(nodeType)) return names;
+		// Mark this node as processed
+		visited.add(nodeType);
+		// Collect properties from the current node's property map
+		if (nodeType.getProperties() != null) for (TypeProperty prop : nodeType.getProperties().getProperties()) names.add(prop.getName());
+		// Recursively call this method for the parent and add those names to our set
+		if (nodeType.getExtends() != null) names.addAll(collectInheritedPropertyNames(nodeType.getExtends(), visited));
+		return names;
 	}
 }
