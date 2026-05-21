@@ -29,6 +29,7 @@ Workflow {
 				runtime = {
 					// Do not generate new files into src/main/java
 					src = null
+					srcGen = "${rootPath}/opencypher/build/generated/sources/xtext/main"
 				}
 				runtimeTest = {
 					enabled = true

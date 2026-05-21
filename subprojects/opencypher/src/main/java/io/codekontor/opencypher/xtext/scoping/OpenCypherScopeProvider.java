@@ -65,7 +65,7 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 			if (context instanceof NodeTypeDefinition) allTypes.remove(context);
 			// Create the scope using a custom name provider lambda.
 			// Since NodeTypeDefinition doesn't have a 'name' attribute, we explicitly map to the 'labelName' property within its 'label' object for linking.
-			return Scopes.scopeFor(allTypes, obj -> ((NodeTypeDefinition)obj).getLabel().getLabelName(), null);
+			return Scopes.scopeFor(allTypes, obj -> org.eclipse.xtext.naming.QualifiedName.create(((NodeTypeDefinition)obj).getLabel().getLabelName()), null);
 		}
 
 		// Fallback to default Xtext behavior for other types of references
@@ -77,7 +77,7 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 	 */
 	protected Iterable<VariableDeclaration> extractDeclarationsFromClauses(EObject context) {
 		// Traverse up the tree to find the root Statement object
-		Statement statement = EcoreUtil2.getAllContainers(context).stream()
+		Statement statement = java.util.stream.StreamSupport.stream(EcoreUtil2.getAllContainers(context).spliterator(), false)
 				.filter(Statement.class::isInstance)
 				.map(Statement.class::cast)
 				.reduce((first, second) -> second)
@@ -188,7 +188,7 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 		List<VariableDeclaration> declarations = new ArrayList<>();
 		extractDeclarationsFromSingleExpression(expression).forEach(declarations::add);
 
-		List<Expression> outerExpressions = EcoreUtil2.getAllContainers(expression).stream()
+		List<Expression> outerExpressions = java.util.stream.StreamSupport.stream(EcoreUtil2.getAllContainers(context).spliterator(), false)
 				.filter(Expression.class::isInstance)
 				.map(Expression.class::cast)
 				.collect(Collectors.toList());

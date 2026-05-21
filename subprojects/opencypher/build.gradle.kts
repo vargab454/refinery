@@ -32,9 +32,20 @@ dependencies {
 	testFixturesApi(libs.xtext.testing)
 	mwe2(libs.xtext.generator)
 	mwe2(libs.xtext.generator.antlr)
+	implementation(files(layout.buildDirectory.dir("generated/sources/xtext/main")))
 }
 
 sourceSets {
+	main {
+		java {
+			srcDir("src/main/java")
+			srcDir(layout.buildDirectory.dir("generated/sources/xtext/main"))
+		}
+		resources {
+			srcDir("src/main/resources")
+			srcDir(layout.buildDirectory.dir("generated/sources/xtext/main"))
+		}
+	}
 	testFixtures {
 		java.srcDir("src/testFixtures/xtext-gen")
 		resources.srcDir("src/testFixtures/xtext-gen")
@@ -46,11 +57,12 @@ val generateXtextLanguage by tasks.registering(JavaExec::class) {
 	classpath(configurations.mwe2)
 	inputs.file("src/main/java/io/codekontor/opencypher/xtext/GenerateOpenCypher.mwe2")
 	inputs.file("src/main/java/io/codekontor/opencypher/xtext/OpenCypher.xtext")
-	outputs.dir("src/main/xtext-gen")
+	outputs.dir(layout.buildDirectory.dir("generated/sources/xtext/main"))
 	outputs.dir("src/testFixtures/xtext-gen")
 	outputs.dir(layout.buildDirectory.dir("generated/sources/xtext/ide"))
 	outputs.dir(layout.buildDirectory.dir("generated/sources/xtext/web"))
-	args("src/main/java/io/codekontor/opencypher/xtext/GenerateOpenCypher.mwe2", "-p", "rootPath=/$projectDir/..")
+	val rootDirFile = projectDir.parentFile
+	args("src/main/java/io/codekontor/opencypher/xtext/GenerateOpenCypher.mwe2", "-p", "rootPath=${rootDirFile.absolutePath}")
 }
 
 tasks {
@@ -76,7 +88,7 @@ tasks {
 	}
 
 	clean {
-		delete("src/main/xtext-gen")
+		delete(layout.buildDirectory.dir("generated/sources/xtext/main"))
 		delete("src/testFixtures/xtext-gen")
 	}
 }

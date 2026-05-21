@@ -1,17 +1,3 @@
-<!--
- * openCypher Xtext - Slizaa Static Software Analysis Tools
- * Copyright © 2026 Code-Kontor GmbH and others (slizaa@codekontor.io)
- *
- * This program and the accompanying materials are made available under the
- * terms of the Eclipse Public License 2.0 which is available at
- * http://www.eclipse.org/legal/epl-2.0.
- *
- * SPDX-License-Identifier: EPL-2.0
- *
- * Contributors:
- *  Code-Kontor GmbH - initial API and implementation
- -->
-
 <?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="openCypher" nsURI="http://www.codekontor.io/opencypher/xtext/OpenCypher"
@@ -37,6 +23,27 @@
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Statement"/>
+  <eClassifiers xsi:type="ecore:EClass" name="GraphTypeDefinition" eSuperTypes="#//Statement"/>
+  <eClassifiers xsi:type="ecore:EClass" name="NodeTypeDefinition" eSuperTypes="#//GraphTypeDefinition">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="label" eType="#//NodeLabel"
+        containment="true"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="extends" eType="#//NodeTypeDefinition"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="properties" eType="#//TypePropertyMap"
+        containment="true"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="RelationshipTypeDefinition" eSuperTypes="#//GraphTypeDefinition">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="left" eType="#//NodeTypeDefinition"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="rel" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="right" eType="#//NodeTypeDefinition"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="TypePropertyMap">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="properties" upperBound="-1"
+        eType="#//TypeProperty" containment="true"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="TypeProperty">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="type" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+  </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Query" eSuperTypes="#//Statement"/>
   <eClassifiers xsi:type="ecore:EClass" name="RegularQuery" eSuperTypes="#//Query"/>
   <eClassifiers xsi:type="ecore:EClass" name="BulkImportQuery" eSuperTypes="#//Query">

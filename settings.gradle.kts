@@ -26,6 +26,7 @@ include(
 		"language-semantics",
 		"language-web",
 		"logic",
+		"opencypher",
 		"store",
 		"store-dse",
 		"store-dse-visualization",
