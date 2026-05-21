@@ -33,15 +33,15 @@ import java.util.List;
  * It coordinates initialization, loading, validation, and invocation of the transformer.
  */
 public class RefineryTransformerMain {
-    public static void main(String[] args) {
-		// Initialize the Xtext injector infrastructure for Standalone execution
+
+	public static void main(String[] args) {
+		// Initialize Xtext injector and fetch core validation/resource components
 		Injector injector = new OpenCypherStandaloneSetup().createInjectorAndDoEMFRegistration();
 		ResourceSet resourceSet = injector.getInstance(ResourceSet.class);
+		IResourceValidator validator = injector.getInstance(IResourceValidator.class);
 		RefineryModelTransformer transformer = new RefineryModelTransformer();
-		// Define path constants for input and output structures
 		File inputDir = new File("models/input");
 		File outputDir = new File("models/output");
-		// Ensure directories exist on the file system
 		if (!inputDir.exists()) {
 			inputDir.mkdirs();
 			System.out.println("[INFO] Created missing input directory at: " + inputDir.getAbsolutePath());
@@ -50,38 +50,53 @@ public class RefineryTransformerMain {
 			outputDir.mkdirs();
 			System.out.println("[INFO] Created missing output directory at: " + outputDir.getAbsolutePath());
 		}
-		// Scan and filter for .cypher files
 		File[] inputFiles = inputDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".cypher"));
 		if (inputFiles == null || inputFiles.length == 0) {
 			System.out.println("[WARN] No '.cypher' files found in: " + inputDir.getAbsolutePath());
 			return;
 		}
-		System.out.println("[START] Batch transformation initiated for " + inputFiles.length + " file(s).");
-		// Process each file individually
+		System.out.println("[START] Batch transformation and validation initiated.");
 		for (File inputFile : inputFiles) {
 			String fileNameWithExtension = inputFile.getName();
-			// Strip the extension to prepare the output name
 			String baseName = fileNameWithExtension.substring(0, fileNameWithExtension.lastIndexOf('.'));
 			File outputFile = new File(outputDir, baseName + ".problem");
-			System.out.println("Processing: " + fileNameWithExtension + " -> " + outputFile.getName());
 			try {
-				// Load the model dynamically via EMF Resource Mechanism
+				// Load the resource dynamically
 				URI fileURI = URI.createFileURI(inputFile.getAbsolutePath());
 				Resource resource = resourceSet.getResource(fileURI, true);
-				Cypher model = (Cypher) resource.getContents().get(0);
-				// Execute the transformation logic
-				String refineryOutput = transformer.convertToRefinery(model);
-				// Write the transformed text to the destination file
+
+				// Run Xtext validation
+				List<Issue> issues = validator.validate(resource, CheckMode.ALL, null);
+				// Filter specifically for ERROR level diagnostics
+				boolean hasErrors = issues.stream().anyMatch(issue -> org.eclipse.xtext.diagnostics.Severity.ERROR == issue.getSeverity());
+				String finalOutputContent;
+				if (hasErrors) {
+					// If errors are found, build an error report instead of transforming
+					System.out.println("Xtext Validation failed for: " + fileNameWithExtension + " -> Writing errors to output.");
+					StringBuilder errorLog = new StringBuilder();
+					errorLog.append("// Transformation aborted due to validation errors inside '").append(fileNameWithExtension).append("':\n\n");
+					for (Issue issue : issues) {
+						if (issue.getSeverity() == org.eclipse.xtext.diagnostics.Severity.ERROR) {
+							errorLog.append("[ERROR] Line ").append(issue.getLineNumber()).append(": ").append(issue.getMessage()).append("\n");
+						}
+					}
+					finalOutputContent = errorLog.toString();
+				} else {
+					// No errors found, safe to trigger the model transformer
+					System.out.println("✔ Transformation successful for: " + fileNameWithExtension);
+					Cypher model = (Cypher) resource.getContents().get(0);
+					finalOutputContent = transformer.convertToRefinery(model);
+				}
+				// Write the resulting content to the output file
 				try (FileWriter writer = new FileWriter(outputFile)) {
-					writer.write(refineryOutput);
+					writer.write(finalOutputContent);
 				}
 			} catch (Exception e) {
-				System.err.println("[ERROR] Failed to transform file '" + fileNameWithExtension + "': " + e.getMessage());
-				e.printStackTrace();
+				System.err.println("[CRITICAL ERROR] Processing failed for '" + fileNameWithExtension + "': " + e.getMessage());
 			}
 		}
-		System.out.println("[SUCCESS] Batch transformation completed. Outputs saved to: " + outputDir.getAbsolutePath());
-    }
+		System.out.println("[SUCCESS] Batch execution finished. Checked files are in: " + outputDir.getAbsolutePath());
+	}
 
     private static Resource loadResource(String filePath, Injector injector) {
         ResourceSet resourceSet = injector.getInstance(ResourceSet.class);
