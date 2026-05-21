@@ -70,14 +70,14 @@ NodeTypeDefinition:
 *	(:Person => { SSN :: int })
 *	(:Student => :Person { studentID :: int })
 */
-    '(' label=NodeLabel '=>' (extends=[NodeTypeDefinition|SYMBOLIC_NAME_X])? (properties=TypePropertyMap)? ')';
+    'node' '(' label=NodeLabel '=>' (':' extends=[NodeTypeDefinition|SYMBOLIC_NAME_X])? (properties=TypePropertyMap)? ')';
 
 RelationshipTypeDefinition:
 /*
 *	(:Person)-[:FRIEND]->(:Person)
 *   (:Student)-[:ATTENDS]->(:Course)
 */
-    '(' left=[NodeTypeDefinition|SYMBOLIC_NAME_X] ')' Dash '[' rel=RelType ']' Dash RightArrowHead '(' right=[NodeTypeDefinition|SYMBOLIC_NAME_X] ')';
+    'rel' '(' ':' left=[NodeTypeDefinition|SYMBOLIC_NAME_X] ')' Dash '[' rel=RelType ']' Dash RightArrowHead '(' ':' right=[NodeTypeDefinition|SYMBOLIC_NAME_X] ')';
 
 TypePropertyMap:
     '{' properties+=TypeProperty (',' properties+=TypeProperty)* '}';

@@ -66,7 +66,7 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 	 */
 	@Inject(optional=true)
 	@Named("opencypher.allowMultipleStatements")
-	private boolean allowMultipleStatements = false;
+	private boolean allowMultipleStatements = true;
 
 	/**
 	 * Validates that the input contains the correct number of statements.
@@ -76,11 +76,9 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 	 */
 	@Check
 	public void checkCypherFormat(Cypher cypher) {
-
 		if (allowMultipleStatements) {
 			return;
 		}
-
 		// Ensure that exactly one statement is present if multiple statements are restricted.
 		if (cypher.getStatements().size() != 1) {
 			error("There must be exactly one statement.",

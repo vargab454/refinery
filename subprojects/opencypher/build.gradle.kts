@@ -43,10 +43,6 @@ sourceSets {
 			srcDir("src/main/java")
 			srcDirs(layout.buildDirectory.dir("generated/sources/xtext/main"))
 		}
-		resources {
-			srcDir("src/main/resources")
-			srcDirs(layout.buildDirectory.dir("generated/sources/xtext/main"))
-		}
 	}
 	testFixtures {
 		java.srcDir("src/testFixtures/xtext-gen")

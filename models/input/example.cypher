@@ -1,0 +1,5 @@
+node (:Person => { SSN :: int })
+node (:Student => :Person { studentID :: int })
+node (:ExamplaryStudent => :Student { commendation :: string })
+node (:Class => { lectureHall :: string })
+rel (:Student)-[:ATTENDS]->(:Class)

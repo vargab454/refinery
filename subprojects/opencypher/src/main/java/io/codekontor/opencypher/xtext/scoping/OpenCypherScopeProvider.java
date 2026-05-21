@@ -65,7 +65,7 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 			if (context instanceof NodeTypeDefinition) allTypes.remove(context);
 			// Create the scope using a custom name provider lambda.
 			// Since NodeTypeDefinition doesn't have a 'name' attribute, we explicitly map to the 'labelName' property within its 'label' object for linking.
-			return Scopes.scopeFor(allTypes, obj -> org.eclipse.xtext.naming.QualifiedName.create(((NodeTypeDefinition)obj).getLabel().getLabelName()), null);
+			return Scopes.scopeFor(allTypes, obj -> org.eclipse.xtext.naming.QualifiedName.create(((NodeTypeDefinition)obj).getLabel().getLabelName()), IScope.NULLSCOPE);
 		}
 
 		// Fallback to default Xtext behavior for other types of references
