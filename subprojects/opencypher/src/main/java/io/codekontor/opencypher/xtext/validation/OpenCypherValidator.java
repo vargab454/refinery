@@ -27,6 +27,9 @@ import io.codekontor.opencypher.xtext.openCypher.RangeLiteral;
 import io.codekontor.opencypher.xtext.openCypher.Return;
 import io.codekontor.opencypher.xtext.openCypher.VersionNumber;
 import io.codekontor.opencypher.xtext.openCypher.Cypher;
+import io.codekontor.opencypher.xtext.openCypher.NodeTypeDefinition;
+import io.codekontor.opencypher.xtext.openCypher.TypePropertyMap;
+import io.codekontor.opencypher.xtext.openCypher.TypeProperty;
 import com.google.inject.name.Named;
 import com.google.inject.Inject;
 
@@ -173,7 +176,7 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 			if (visited.contains(current)) {
 				error("Cyclic inheritance detected: NodeType '" + nodeType.getLabel().getLabelName() + "' cannot inherit " +
 								"from itself through hierarchy.",
-						OpenCypherPackage.Literals.NODE_TYPE_DEFINITION__EXTENDS, CYCLIC_INHERITANCE);
+						OpenCypherPackage.eINSTANCE.getNodeTypeDefinition_Extends(), CYCLIC_INHERITANCE);
 				return;
 			}
 			// Mark the current parent as visited
@@ -198,7 +201,7 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 				.count();
 		// If more than one definition exists with this name, flag an error on the label
 		if (count > 1) error("NodeType '" + name + "' is already defined.",
-				OpenCypherPackage.Literals.NODE_TYPE_DEFINITION__LABEL, DUPLICATE_NODE_TYPE);
+				OpenCypherPackage.eINSTANCE.getNodeTypeDefinition_Label(), DUPLICATE_NODE_TYPE);
 	}
 
 	/**
@@ -213,7 +216,7 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 			String name = prop.getName();
 			// If the name is already in the set, it's a duplicate within this type
 			if (propertyNames.contains(name)) error("Duplicate property '" + name + "' in type definition.", prop,
-					OpenCypherPackage.Literals.TYPE_PROPERTY__NAME, DUPLICATE_PROPERTY);
+					OpenCypherPackage.eINSTANCE.getTypeProperty_Name(), DUPLICATE_PROPERTY);
 			// Add the name to the set to check against subsequent properties
 			propertyNames.add(name);
 		}
@@ -233,7 +236,7 @@ public class OpenCypherValidator extends AbstractOpenCypherValidator {
 		for (TypeProperty prop : nodeType.getProperties().getProperties()) {
 			if (inheritedProperties.contains(prop.getName()))
 				warning("Property '" + prop.getName() + "' shadows a property defined in a parent type.", prop,
-						OpenCypherPackage.Literals.TYPE_PROPERTY__NAME, PROPERTY_SHADOWING);
+						OpenCypherPackage.eINSTANCE.getTypeProperty_Name(), PROPERTY_SHADOWING);
 		}
 	}
 

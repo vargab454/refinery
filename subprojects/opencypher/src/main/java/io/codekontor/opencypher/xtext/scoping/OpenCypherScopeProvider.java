@@ -40,7 +40,7 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 	@Override
 	public IScope getScope(EObject context, EReference reference) {
 		// Check if we are currently looking for the definition of a variable reference
-		if (context instanceof VariableRef && reference == OpenCypherPackage.Literals.VARIABLE_REF__VARIABLE_REF) {
+		if (context instanceof VariableRef && reference == OpenCypherPackage.eINSTANCE.getVariableRef_VariableRef()) {
 
 			// Collect declarations from three possible sources of variables in Cypher
 			Iterable<VariableDeclaration> elementsFromStatement = extractDeclarationsFromClauses(context);

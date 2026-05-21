@@ -70,14 +70,6 @@ tasks {
 		dependsOn(typeCheckFrontend)
 		dependsOn(lintFrontend)
 	}
-
-	register<JavaExec>("runRefineryTransformer") {
-		group = "application"
-		description = "Runs the standalone openCypher to Refinery model transformer."
-		mainClass.set("io.codekontor.opencypher.xtext.main.RefineryTransformerMain")
-		classpath = project(":refinery-opencypher").extensions.getByType<SourceSetContainer>()["main"].runtimeClasspath
-		workingDir = rootProject.projectDir
-	}
 }
 
 val cleanMavenRepository by tasks.registering(Delete::class) {

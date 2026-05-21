@@ -33,17 +33,19 @@ dependencies {
 	mwe2(libs.xtext.generator)
 	mwe2(libs.xtext.generator.antlr)
 	implementation(files(layout.buildDirectory.dir("generated/sources/xtext/main")))
+	runtimeOnly("org.slf4j:log4j-over-slf4j:2.0.13")
+	runtimeOnly("ch.qos.logback:logback-classic:1.5.6")
 }
 
 sourceSets {
 	main {
 		java {
 			srcDir("src/main/java")
-			srcDir(layout.buildDirectory.dir("generated/sources/xtext/main"))
+			srcDirs(layout.buildDirectory.dir("generated/sources/xtext/main"))
 		}
 		resources {
 			srcDir("src/main/resources")
-			srcDir(layout.buildDirectory.dir("generated/sources/xtext/main"))
+			srcDirs(layout.buildDirectory.dir("generated/sources/xtext/main"))
 		}
 	}
 	testFixtures {
@@ -90,6 +92,14 @@ tasks {
 	clean {
 		delete(layout.buildDirectory.dir("generated/sources/xtext/main"))
 		delete("src/testFixtures/xtext-gen")
+	}
+
+	register<JavaExec>("runRefineryTransformer") {
+		group = "application"
+		description = "Runs the standalone openCypher to Refinery model transformer."
+		mainClass.set("io.codekontor.opencypher.xtext.main.RefineryTransformerMain")
+		classpath = sourceSets.main.get().runtimeClasspath
+		workingDir = rootProject.projectDir
 	}
 }
 
