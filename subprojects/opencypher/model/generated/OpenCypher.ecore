@@ -1,3 +1,9 @@
+<!--
+  SPDX-FileCopyrightText: 2021-2025 The Refinery Authors <https://refinery.tools/>
+
+  SPDX-License-Identifier: EPL-2.0
+-->
+
 <?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="openCypher" nsURI="http://www.codekontor.io/opencypher/xtext/OpenCypher"
