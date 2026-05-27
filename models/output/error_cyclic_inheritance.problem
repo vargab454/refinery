@@ -1,0 +1,5 @@
+// Transformation aborted due to validation errors inside 'error_cyclic_inheritance.cypher':
+
+[ERROR] Line 1: Cyclic inheritance detected: NodeType 'A' belongs to a closed loop chain.
+[ERROR] Line 2: Cyclic inheritance detected: NodeType 'B' belongs to a closed loop chain.
+[ERROR] Line 3: Cyclic inheritance detected: NodeType 'C' belongs to a closed loop chain.

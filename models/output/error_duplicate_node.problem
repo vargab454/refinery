@@ -1,0 +1,4 @@
+// Transformation aborted due to validation errors inside 'error_duplicate_node.cypher':
+
+[ERROR] Line 1: NodeType 'Person' is already defined.
+[ERROR] Line 2: NodeType 'Person' is already defined.

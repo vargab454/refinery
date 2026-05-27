@@ -60,30 +60,26 @@ Statement:
  *              | oC_Query
  *              ;
  */
-	Command | Query | GraphTypeDefinition;
+	GraphElement | Command | Query;
 
-GraphTypeDefinition:
-    NodeTypeDefinition | RelationshipTypeDefinition;
+GraphElement:
+    NodeTypeDefinition ({RelationshipTypeDefinition.left=current} Dash '[' rel=RelType ']' Dash RightArrowHead '(' ':' right=SYMBOLIC_NAME_X ')')?;
 
 NodeTypeDefinition:
 /*
 *	(:Person => { SSN :: int })
 *	(:Student => :Person { studentID :: int })
 */
-    'node' '(' label=NodeLabel '=>' (':' extends=[NodeTypeDefinition|SYMBOLIC_NAME_X])? (properties=TypePropertyMap)? ')';
-
-RelationshipTypeDefinition:
-/*
-*	(:Person)-[:FRIEND]->(:Person)
-*   (:Student)-[:ATTENDS]->(:Course)
-*/
-    'rel' '(' ':' left=[NodeTypeDefinition|SYMBOLIC_NAME_X] ')' Dash '[' rel=RelType ']' Dash RightArrowHead '(' ':' right=[NodeTypeDefinition|SYMBOLIC_NAME_X] ')';
+    '(' ':' name=SYMBOLIC_NAME_X (SubClassOf superTypes+=SYMBOLIC_NAME_X (',' superTypes+=SYMBOLIC_NAME_X)*)? ')' (properties=TypePropertyMap)?;
 
 TypePropertyMap:
     '{' properties+=TypeProperty (',' properties+=TypeProperty)* '}';
 
 TypeProperty:
     name=PropertyKeyName '::' type=SYMBOLIC_NAME_X;
+
+fragment SubClassOf:
+    '<' ':';
 
 Query:
 /*

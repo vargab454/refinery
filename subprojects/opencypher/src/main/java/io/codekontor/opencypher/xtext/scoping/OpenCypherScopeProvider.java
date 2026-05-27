@@ -57,17 +57,6 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 			return Scopes.scopeFor(allElements);
 		}
 
-		// Handle references where the target type is a NodeTypeDefinition
-		if (reference.getEReferenceType().getInstanceClass() == NodeTypeDefinition.class) {
-			// Collect all NodeTypeDefinitions from the entire resource
-			List<NodeTypeDefinition> allTypes = EcoreUtil2.getAllContentsOfType(context.eResource().getContents().get(0), NodeTypeDefinition.class);
-			// Prevent self-inheritance
-			if (context instanceof NodeTypeDefinition) allTypes.remove(context);
-			// Create the scope using a custom name provider lambda.
-			// Since NodeTypeDefinition doesn't have a 'name' attribute, we explicitly map to the 'labelName' property within its 'label' object for linking.
-			return Scopes.scopeFor(allTypes, obj -> org.eclipse.xtext.naming.QualifiedName.create(((NodeTypeDefinition)obj).getLabel().getLabelName()), IScope.NULLSCOPE);
-		}
-
 		// Fallback to default Xtext behavior for other types of references
 		return super.getScope(context, reference);
 	}
@@ -76,13 +65,11 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 	 * Finds the top-level Statement and starts extracting variables defined in its various clauses.
 	 */
 	protected Iterable<VariableDeclaration> extractDeclarationsFromClauses(EObject context) {
-		// Traverse up the tree to find the root Statement object
 		Statement statement = java.util.stream.StreamSupport.stream(EcoreUtil2.getAllContainers(context).spliterator(), false)
 				.filter(Statement.class::isInstance)
 				.map(Statement.class::cast)
 				.reduce((first, second) -> second)
 				.orElse(null);
-
 		if (statement == null) return Collections.emptyList();
 		return extractDeclarationsFromStatement(statement, context);
 	}
@@ -92,24 +79,18 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 	 */
 	protected Iterable<VariableDeclaration> extractDeclarationsFromStatement(EObject statement, EObject context) {
 		if (statement instanceof RegularQuery) {
-			// In a regular query, we find the clauses and filter based on where we are
 			RegularQuery regularQuery = (RegularQuery) statement;
 			Clause contextClause = EcoreUtil2.getContainerOfType(context, Clause.class);
 			SinglePartQuery spq = EcoreUtil2.getContainerOfType(context, SinglePartQuery.class);
 			MultiPartQuery mpq = EcoreUtil2.getContainerOfType(context, MultiPartQuery.class);
-
 			List<? extends Clause> clauses = (mpq == null) ? extractClauses(spq) : extractClauses(mpq);
 			return extractDeclarationsFromClauseList(clauses, contextClause, context);
-
 		} else if (statement instanceof BulkImportQuery) {
 			BulkImportQuery bulkImportQuery = (BulkImportQuery) statement;
 			Clause contextClause = EcoreUtil2.getContainerOfType(context, Clause.class);
 			List<? extends Clause> clauses = extractClauses(bulkImportQuery.getLoadCSVQuery().getSingleQuery());
 			return extractDeclarationsFromClauseList(clauses, contextClause, context);
-
-		} else if (statement instanceof Command) {
-			return EcoreUtil2.getAllContentsOfType(statement, VariableDeclaration.class);
-		}
+		} else if (statement instanceof Command) return EcoreUtil2.getAllContentsOfType(statement, VariableDeclaration.class);
 		return Collections.emptyList();
 	}
 
@@ -153,7 +134,6 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 		List<VariableDeclaration> elements = new ArrayList<>();
 		MergeAction mergeAction = EcoreUtil2.getContainerOfType(context, MergeAction.class);
 		Clause currentClause = (mergeAction != null) ? EcoreUtil2.getContainerOfType(mergeAction, Clause.class) : contextClause;
-
 		int offset = 0;
 		if (contextClause instanceof Unwind) {
 			offset = -1;
@@ -164,7 +144,6 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 				offset = -1;
 			}
 		}
-
 		int startClauseIndex = clauses.indexOf(currentClause) + offset;
 		for (int i = startClauseIndex; i >= 0; i--) {
 			Clause clause = clauses.get(i);
@@ -184,15 +163,12 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 	protected Iterable<VariableDeclaration> extractDeclarationsFromExpression(EObject context) {
 		Expression expression = EcoreUtil2.getContainerOfType(context.eContainer(), Expression.class);
 		if (expression == null) return Collections.emptyList();
-
 		List<VariableDeclaration> declarations = new ArrayList<>();
 		extractDeclarationsFromSingleExpression(expression).forEach(declarations::add);
-
 		List<Expression> outerExpressions = java.util.stream.StreamSupport.stream(EcoreUtil2.getAllContainers(context).spliterator(), false)
 				.filter(Expression.class::isInstance)
 				.map(Expression.class::cast)
 				.collect(Collectors.toList());
-
 		outerExpressions.forEach(oe -> extractDeclarationsFromSingleExpression(oe).forEach(declarations::add));
 		return declarations;
 	}
@@ -202,7 +178,6 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 	 */
 	protected Iterable<VariableDeclaration> extractDeclarationsFromSingleExpression(Expression expression) {
 		FilterExpression filterExpression = extractFilterExpression(expression);
-
 		if (filterExpression != null) {
 			return Collections.singletonList(filterExpression.getIdInColl().getVariable());
 		} else if (expression instanceof Reduce) {

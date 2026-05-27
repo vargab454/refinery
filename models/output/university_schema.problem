@@ -1,0 +1,20 @@
+class Person {}
+
+class Course {
+    string courseCode
+    int credits
+}
+
+class Department {
+    string deptName
+}
+
+class Student extends Person {
+    string neptunCode
+    int enrollmentYear
+}
+
+pred ATTENDS(Student left, Course right).
+
+pred BELONGS_TO(Course left, Department right).
+

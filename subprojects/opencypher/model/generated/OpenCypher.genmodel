@@ -24,16 +24,11 @@
       <genFeatures createChild="false" ecoreFeature="ecore:EAttribute OpenCypher.ecore#//ConfigurationOption/value"/>
     </genClasses>
     <genClasses ecoreClass="OpenCypher.ecore#//Statement"/>
-    <genClasses ecoreClass="OpenCypher.ecore#//GraphTypeDefinition"/>
+    <genClasses ecoreClass="OpenCypher.ecore#//GraphElement"/>
     <genClasses ecoreClass="OpenCypher.ecore#//NodeTypeDefinition">
-      <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//NodeTypeDefinition/label"/>
-      <genFeatures notify="false" createChild="false" propertySortChoices="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//NodeTypeDefinition/extends"/>
+      <genFeatures createChild="false" ecoreFeature="ecore:EAttribute OpenCypher.ecore#//NodeTypeDefinition/name"/>
+      <genFeatures createChild="false" ecoreFeature="ecore:EAttribute OpenCypher.ecore#//NodeTypeDefinition/superTypes"/>
       <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//NodeTypeDefinition/properties"/>
-    </genClasses>
-    <genClasses ecoreClass="OpenCypher.ecore#//RelationshipTypeDefinition">
-      <genFeatures notify="false" createChild="false" propertySortChoices="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//RelationshipTypeDefinition/left"/>
-      <genFeatures createChild="false" ecoreFeature="ecore:EAttribute OpenCypher.ecore#//RelationshipTypeDefinition/rel"/>
-      <genFeatures notify="false" createChild="false" propertySortChoices="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//RelationshipTypeDefinition/right"/>
     </genClasses>
     <genClasses ecoreClass="OpenCypher.ecore#//TypePropertyMap">
       <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//TypePropertyMap/properties"/>
@@ -403,6 +398,11 @@
       <genFeatures createChild="false" ecoreFeature="ecore:EAttribute OpenCypher.ecore#//AllOptions/explain"/>
       <genFeatures createChild="false" ecoreFeature="ecore:EAttribute OpenCypher.ecore#//AllOptions/profile"/>
       <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//AllOptions/cypherOption"/>
+    </genClasses>
+    <genClasses ecoreClass="OpenCypher.ecore#//RelationshipTypeDefinition">
+      <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//RelationshipTypeDefinition/left"/>
+      <genFeatures createChild="false" ecoreFeature="ecore:EAttribute OpenCypher.ecore#//RelationshipTypeDefinition/rel"/>
+      <genFeatures createChild="false" ecoreFeature="ecore:EAttribute OpenCypher.ecore#//RelationshipTypeDefinition/right"/>
     </genClasses>
     <genClasses ecoreClass="OpenCypher.ecore#//CombinedQuery">
       <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//CombinedQuery/singleQuery"/>

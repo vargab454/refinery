@@ -1,0 +1,10 @@
+class Vehicle {
+    string id
+    float weight
+}
+
+class Car extends Vehicle {
+    int id
+    int doorCount
+}
+

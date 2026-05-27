@@ -1,4 +1,0 @@
-// Transformation aborted due to validation errors inside 'exampleError.cypher':
-
-[ERROR] Line 1: Cyclic inheritance detected: NodeType 'Person' cannot inherit from itself through hierarchy.
-[ERROR] Line 2: Cyclic inheritance detected: NodeType 'Student' cannot inherit from itself through hierarchy.

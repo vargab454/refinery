@@ -23,18 +23,13 @@
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="value" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="Statement"/>
-  <eClassifiers xsi:type="ecore:EClass" name="GraphTypeDefinition" eSuperTypes="#//Statement"/>
-  <eClassifiers xsi:type="ecore:EClass" name="NodeTypeDefinition" eSuperTypes="#//GraphTypeDefinition">
-    <eStructuralFeatures xsi:type="ecore:EReference" name="label" eType="#//NodeLabel"
-        containment="true"/>
-    <eStructuralFeatures xsi:type="ecore:EReference" name="extends" eType="#//NodeTypeDefinition"/>
+  <eClassifiers xsi:type="ecore:EClass" name="GraphElement" eSuperTypes="#//Statement"/>
+  <eClassifiers xsi:type="ecore:EClass" name="NodeTypeDefinition" eSuperTypes="#//GraphElement">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="superTypes" unique="false"
+        upperBound="-1" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="properties" eType="#//TypePropertyMap"
         containment="true"/>
-  </eClassifiers>
-  <eClassifiers xsi:type="ecore:EClass" name="RelationshipTypeDefinition" eSuperTypes="#//GraphTypeDefinition">
-    <eStructuralFeatures xsi:type="ecore:EReference" name="left" eType="#//NodeTypeDefinition"/>
-    <eStructuralFeatures xsi:type="ecore:EAttribute" name="rel" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
-    <eStructuralFeatures xsi:type="ecore:EReference" name="right" eType="#//NodeTypeDefinition"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="TypePropertyMap">
     <eStructuralFeatures xsi:type="ecore:EReference" name="properties" upperBound="-1"
@@ -534,6 +529,12 @@
     <eStructuralFeatures xsi:type="ecore:EAttribute" name="profile" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="cypherOption" upperBound="-1"
         eType="#//CypherOption" containment="true"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="RelationshipTypeDefinition" eSuperTypes="#//GraphElement">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="left" eType="#//NodeTypeDefinition"
+        containment="true"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="rel" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="right" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="CombinedQuery" eSuperTypes="#//RegularQuery">
     <eStructuralFeatures xsi:type="ecore:EReference" name="singleQuery" eType="#//SingleQuery"

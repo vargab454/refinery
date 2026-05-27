@@ -1,0 +1,1 @@
+(:Student <: Person) { studentId :: int }

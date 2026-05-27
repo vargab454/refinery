@@ -26,6 +26,7 @@ import org.eclipse.xtext.validation.Issue;
 import com.google.inject.Injector;
 import java.io.File;
 import java.io.FileWriter;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -34,68 +35,91 @@ import java.util.List;
  */
 public class RefineryTransformerMain {
 
+	private static final String ANSI_RESET = "\u001B[0m";
+	private static final String ANSI_RED = "\u001B[31m";
+	private static final String ANSI_GREEN = "\u001B[32m";
+	private static final String ANSI_YELLOW = "\u001B[33m";
+
+	private enum TransformationResult {
+		SUCCESS,
+		WARNING,
+		ERROR
+	}
+
+	private static class BuildReport {
+		final String fileName;
+		final TransformationResult result;
+		int errorCount = 0;
+		int warningCount = 0;
+
+		public BuildReport(String fileName, TransformationResult result) {
+			this.fileName = fileName;
+			this.result = result;
+		}
+	}
+
 	public static void main(String[] args) {
-		// Initialize Xtext injector and fetch core validation/resource components
 		Injector injector = new OpenCypherStandaloneSetup().createInjectorAndDoEMFRegistration();
 		ResourceSet resourceSet = injector.getInstance(ResourceSet.class);
 		IResourceValidator validator = injector.getInstance(IResourceValidator.class);
 		RefineryModelTransformer transformer = new RefineryModelTransformer();
 		File inputDir = new File("models/input");
 		File outputDir = new File("models/output");
-		if (!inputDir.exists()) {
-			inputDir.mkdirs();
-			System.out.println("[INFO] Created missing input directory at: " + inputDir.getAbsolutePath());
-		}
-		if (!outputDir.exists()) {
-			outputDir.mkdirs();
-			System.out.println("[INFO] Created missing output directory at: " + outputDir.getAbsolutePath());
-		}
+		if (!inputDir.exists()) inputDir.mkdirs();
+		if (!outputDir.exists()) outputDir.mkdirs();
 		File[] inputFiles = inputDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".cypher"));
 		if (inputFiles == null || inputFiles.length == 0) {
-			System.out.println("[WARN] No '.cypher' files found in: " + inputDir.getAbsolutePath());
+			System.out.println(ANSI_YELLOW + "[WARN] No '.cypher' files found in: " + inputDir.getAbsolutePath() + ANSI_RESET);
 			return;
 		}
-		System.out.println("[START] Batch transformation and validation initiated.");
+		System.out.println("\n[START] Batch transformation initiated...");
+		List<BuildReport> reports = new ArrayList<>();
 		for (File inputFile : inputFiles) {
-			String fileNameWithExtension = inputFile.getName();
-			String baseName = fileNameWithExtension.substring(0, fileNameWithExtension.lastIndexOf('.'));
+			String fileName = inputFile.getName();
+			String baseName = fileName.substring(0, fileName.lastIndexOf('.'));
 			File outputFile = new File(outputDir, baseName + ".problem");
 			try {
-				// Load the resource dynamically
 				URI fileURI = URI.createFileURI(inputFile.getAbsolutePath());
 				Resource resource = resourceSet.getResource(fileURI, true);
-
-				// Run Xtext validation
 				List<Issue> issues = validator.validate(resource, CheckMode.ALL, null);
-				// Filter specifically for ERROR level diagnostics
-				boolean hasErrors = issues.stream().anyMatch(issue -> org.eclipse.xtext.diagnostics.Severity.ERROR == issue.getSeverity());
+				long errorCount = issues.stream().filter(i -> i.getSeverity() == org.eclipse.xtext.diagnostics.Severity.ERROR).count();
+				long warningCount = issues.stream().filter(i -> i.getSeverity() == org.eclipse.xtext.diagnostics.Severity.WARNING).count();
+				BuildReport report;
 				String finalOutputContent;
-				if (hasErrors) {
-					// If errors are found, build an error report instead of transforming
-					System.out.println("Xtext Validation failed for: " + fileNameWithExtension + " -> Writing errors to output.");
+				if (errorCount > 0) {
+					report = new BuildReport(fileName, TransformationResult.ERROR);
+					report.errorCount = (int) errorCount;
+					report.warningCount = (int) warningCount;
 					StringBuilder errorLog = new StringBuilder();
-					errorLog.append("// Transformation aborted due to validation errors inside '").append(fileNameWithExtension).append("':\n\n");
+					errorLog.append("// Transformation aborted due to validation errors inside '").append(fileName).append("':\n\n");
 					for (Issue issue : issues) {
 						if (issue.getSeverity() == org.eclipse.xtext.diagnostics.Severity.ERROR) {
 							errorLog.append("[ERROR] Line ").append(issue.getLineNumber()).append(": ").append(issue.getMessage()).append("\n");
 						}
 					}
 					finalOutputContent = errorLog.toString();
+				} else if (warningCount > 0) {
+					report = new BuildReport(fileName, TransformationResult.WARNING);
+					report.warningCount = (int) warningCount;
+					Cypher model = (Cypher) resource.getContents().get(0);
+					finalOutputContent = transformer.convertToRefinery(model);
 				} else {
-					// No errors found, safe to trigger the model transformer
-					System.out.println("✔ Transformation successful for: " + fileNameWithExtension);
+					report = new BuildReport(fileName, TransformationResult.SUCCESS);
 					Cypher model = (Cypher) resource.getContents().get(0);
 					finalOutputContent = transformer.convertToRefinery(model);
 				}
-				// Write the resulting content to the output file
+				reports.add(report);
 				try (FileWriter writer = new FileWriter(outputFile)) {
 					writer.write(finalOutputContent);
 				}
 			} catch (Exception e) {
-				System.err.println("[CRITICAL ERROR] Processing failed for '" + fileNameWithExtension + "': " + e.getMessage());
+				BuildReport criticalReport = new BuildReport(fileName, TransformationResult.ERROR);
+				criticalReport.errorCount = 1;
+				reports.add(criticalReport);
+				System.err.println("[CRITICAL ERROR] " + fileName + ": " + e.getMessage());
 			}
 		}
-		System.out.println("[SUCCESS] Batch execution finished. Checked files are in: " + outputDir.getAbsolutePath());
+		printSummary(reports, outputDir.getAbsolutePath());
 	}
 
     private static Resource loadResource(String filePath, Injector injector) {
@@ -132,4 +156,38 @@ public class RefineryTransformerMain {
         }
         return hasErrors;
     }
+
+	private static void printSummary(List<BuildReport> reports, String outputPath) {
+		System.out.println("\n==================================================");
+		System.out.println("               TRANSFORMATION SUMMARY             ");
+		System.out.println("==================================================");
+		int totalSuccess = 0;
+		int totalWarnings = 0;
+		int totalErrors = 0;
+		for (BuildReport r : reports) {
+			if (r.result == TransformationResult.SUCCESS) {
+				System.out.println(ANSI_GREEN + "[SUCCESS] " + r.fileName + ANSI_RESET);
+				totalSuccess++;
+			}
+		}
+		for (BuildReport r : reports) {
+			if (r.result == TransformationResult.WARNING) {
+				System.out.println(ANSI_YELLOW + "[WARNING] " + r.fileName + " (" + r.warningCount + " warning shadowed)" + ANSI_RESET);
+				totalWarnings++;
+			}
+		}
+		for (BuildReport r : reports) {
+			if (r.result == TransformationResult.ERROR) {
+				System.out.println(ANSI_RED + "[ERROR]   " + r.fileName + " (" + r.errorCount + " critical error found)" + ANSI_RESET);
+				totalErrors++;
+			}
+		}
+		System.out.println("==================================================");
+		System.out.print("Final Metrics: ");
+		System.out.print(ANSI_GREEN + totalSuccess + " Success" + ANSI_RESET + " | ");
+		System.out.print(ANSI_YELLOW + totalWarnings + " Warning" + ANSI_RESET + " | ");
+		System.out.println(ANSI_RED + totalErrors + " Failed" + ANSI_RESET);
+		System.out.println("Output artifacts directory: " + outputPath);
+		System.out.println("==================================================\n");
+	}
 }

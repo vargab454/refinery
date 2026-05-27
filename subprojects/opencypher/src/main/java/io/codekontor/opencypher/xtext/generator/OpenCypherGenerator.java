@@ -38,21 +38,17 @@ public class OpenCypherGenerator extends AbstractGenerator {
 	 */
 	@Override
 	public void doGenerate(Resource resource, IFileSystemAccess2 fsa, IGeneratorContext context) {
-		// Validate that the resource is not empty and contains a Cypher root object
 		if (resource.getContents().isEmpty() || !(resource.getContents().get(0) instanceof Cypher)) return;
 		Cypher model = (Cypher) resource.getContents().get(0);
-		// Iterate through all statements in the file
 		model.getStatements().stream()
-				// Filter specifically for NodeTypeDefinitions
 				.filter(NodeTypeDefinition.class::isInstance)
 				.map(NodeTypeDefinition.class::cast)
 				.forEach(nodeType -> {
-					// Use the label name as the class name
-					String className = nodeType.getLabel().getLabelName();
-					// Generate the actual Java source code string
-					String content = generateJavaClass(nodeType);
-					// Save the generated string into a .java file
-					fsa.generateFile("generated/" + className + ".java", content);
+					String className = nodeType.getName();
+					if (className != null) {
+						String content = generateJavaClass(nodeType);
+						fsa.generateFile("generated/" + className + ".java", content);
+					}
 				});
 	}
 
@@ -64,17 +60,16 @@ public class OpenCypherGenerator extends AbstractGenerator {
 	 */
 	private String generateJavaClass(NodeTypeDefinition nodeType) {
 		StringBuilder sb = new StringBuilder();
-		String className = nodeType.getLabel().getLabelName();
-		// Define the package and basic class structure
+		String className = nodeType.getName();
 		sb.append("package io.codekontor.generated;\n\n");
 		sb.append("public class ").append(className);
-		// Handle class inheritance if the 'extends' keyword was used
-		if (nodeType.getExtends() != null) sb.append(" extends ").append(nodeType.getExtends().getLabel().getLabelName());
+		if (nodeType.getSuperTypes() != null && !nodeType.getSuperTypes().isEmpty()) {
+			String primaryParent = nodeType.getSuperTypes().get(0);
+			sb.append(" extends ").append(primaryParent);
+		}
 		sb.append(" {\n");
-		// Generate private fields for each property defined in the NodeType
-		if (nodeType.getProperties() != null) {
+		if (nodeType.getProperties() != null && nodeType.getProperties().getProperties() != null) {
 			for (TypeProperty prop : nodeType.getProperties().getProperties()) {
-				// Use mapType to convert Cypher types to Java types
 				sb.append("    private ").append(mapType(prop.getType())).append(" ").append(prop.getName()).append(";\n");
 			}
 		}
@@ -89,7 +84,6 @@ public class OpenCypherGenerator extends AbstractGenerator {
 	 * @return The canonical Java type name.
 	 */
 	private String mapType(String cypherType) {
-		// Fallback for untyped properties
 		if (cypherType == null) return "Object";
 		return switch (cypherType.toLowerCase()) {
 			case "int", "integer", "long" -> "Long";

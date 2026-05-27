@@ -1,0 +1,28 @@
+class Person {
+    int ssn
+    string name
+}
+
+class Employee extends Person {
+    string employeeId
+}
+
+class Doctor extends Employee {
+    string specialization
+    int licenseNumber
+}
+
+class Patient extends Person {
+    string medicalHistoryId
+    string admissionDate
+}
+
+class Room {
+    int roomNumber
+    int floor
+}
+
+pred TREATS(Doctor left, Patient right).
+
+pred ASSIGNED_TO(Patient left, Room right).
+
