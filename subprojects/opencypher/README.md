@@ -1,3 +1,9 @@
+<!--
+  SPDX-FileCopyrightText: 2021-2025 The Refinery Authors <https://refinery.tools/>
+
+  SPDX-License-Identifier: EPL-2.0
+-->
+
 # Commands
 - ./gradlew :refinery-opencypher:generateXtextLanguage
   - Generates the necessary files from the xtext language
