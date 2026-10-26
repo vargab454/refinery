@@ -33,14 +33,11 @@ dependencies {
 	mwe2(libs.xtext.generator)
 	mwe2(libs.xtext.generator.antlr)
 	implementation(files(layout.buildDirectory.dir("generated/sources/xtext/main")))
-	runtimeOnly("org.slf4j:log4j-over-slf4j:2.0.13")
-	runtimeOnly("ch.qos.logback:logback-classic:1.5.6")
 }
 
 sourceSets {
 	main {
 		java {
-			srcDir("src/main/java")
 			srcDirs(layout.buildDirectory.dir("generated/sources/xtext/main"))
 		}
 	}

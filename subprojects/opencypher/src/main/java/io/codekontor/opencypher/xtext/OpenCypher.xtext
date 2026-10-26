@@ -60,26 +60,26 @@ Statement:
  *              | oC_Query
  *              ;
  */
-	GraphElement | Command | Query;
+	GraphElement | Command | Query | ConstraintStatement;
+
+ConstraintStatement:
+    'CONSTRAINT' constraintPattern=Pattern
+    'IMPLIES' impliesPattern=Pattern;
 
 GraphElement:
-    NodeTypeDefinition ({RelationshipTypeDefinition.left=current} Dash '[' rel=RelType ']' Dash RightArrowHead '(' ':' right=SYMBOLIC_NAME_X ')')?;
+    NodeTypeDefinition ({RelationshipTypeDefinition.left=current} Dash '[' rel=RelType (SubClassOf properties=TypePropertyMap)? ']' Dash RightArrowHead '(' ':' right=SYMBOLIC_NAME_X ')')?;
 
 NodeTypeDefinition:
-/*
-*	(:Person => { SSN :: int })
-*	(:Student => :Person { studentID :: int })
-*/
-    '(' ':' name=SYMBOLIC_NAME_X (SubClassOf superTypes+=SYMBOLIC_NAME_X (',' superTypes+=SYMBOLIC_NAME_X)*)? ')' (properties=TypePropertyMap)?;
+    '(' ':' name=SYMBOLIC_NAME_X (SubClassOf superTypes+=SYMBOLIC_NAME_X ((',' | '&') superTypes+=SYMBOLIC_NAME_X)*)? ')' (properties=TypePropertyMap)?;
 
 TypePropertyMap:
     '{' properties+=TypeProperty (',' properties+=TypeProperty)* '}';
 
 TypeProperty:
-    name=PropertyKeyName '::' type=SYMBOLIC_NAME_X;
+    name=PropertyKeyName '::' type=SYMBOLIC_NAME_X (notNull?='NOT' 'NULL')?;
 
 fragment SubClassOf:
-    '<' ':';
+    '=' '>';
 
 Query:
 /*
@@ -138,8 +138,9 @@ SinglePartQuery:
  *                    | ( ( oC_ReadingClause SP? )* oC_UpdatingClause ( SP? oC_UpdatingClause )* ( SP? oC_Return )? )
  *                    ;
  */
-	(readingClauses+=ReadingClause)* return=Return |
-	(readingClauses+=ReadingClause)* (updatingClauses+=UpdatingClause)+ (return=Return)? ;
+	(readingClauses+=ReadingClause)+ (return=Return)? |
+    (readingClauses+=ReadingClause)* (updatingClauses+=UpdatingClause)+ (return=Return)? |
+    (return=Return) ;
 
 MultiPartQuery:
 /*

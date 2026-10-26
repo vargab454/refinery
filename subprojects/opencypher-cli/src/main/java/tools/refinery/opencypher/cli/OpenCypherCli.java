@@ -11,7 +11,7 @@
  * Contributors:
  *  Code-Kontor GmbH - initial API and implementation
  */
-package io.codekontor.opencypher.xtext.main;
+package tools.refinery.opencypher.cli;
 
 import io.codekontor.opencypher.xtext.OpenCypherStandaloneSetup;
 import io.codekontor.opencypher.xtext.openCypher.Cypher;
@@ -33,7 +33,7 @@ import java.util.List;
  * Main execution class for the standalone openCypher-to-Refinery compiler.
  * It coordinates initialization, loading, validation, and invocation of the transformer.
  */
-public class RefineryTransformerMain {
+public class OpenCypherCli {
 
 	private static final String ANSI_RESET = "\u001B[0m";
 	private static final String ANSI_RED = "\u001B[31m";
@@ -101,11 +101,11 @@ public class RefineryTransformerMain {
 				} else if (warningCount > 0) {
 					report = new BuildReport(fileName, TransformationResult.WARNING);
 					report.warningCount = (int) warningCount;
-					Cypher model = (Cypher) resource.getContents().get(0);
+					Cypher model = (Cypher) resource.getContents().getFirst();
 					finalOutputContent = transformer.convertToRefinery(model);
 				} else {
 					report = new BuildReport(fileName, TransformationResult.SUCCESS);
-					Cypher model = (Cypher) resource.getContents().get(0);
+					Cypher model = (Cypher) resource.getContents().getFirst();
 					finalOutputContent = transformer.convertToRefinery(model);
 				}
 				reports.add(report);
@@ -121,41 +121,6 @@ public class RefineryTransformerMain {
 		}
 		printSummary(reports, outputDir.getAbsolutePath());
 	}
-
-    private static Resource loadResource(String filePath, Injector injector) {
-        ResourceSet resourceSet = injector.getInstance(ResourceSet.class);
-        URI fileURI = URI.createFileURI(new File(filePath).getAbsolutePath());
-        return resourceSet.getResource(fileURI, true);
-    }
-
-    /**
-     * Executes all Xtext validators linked to the language grammar.
-     * Maps both standard structural checks and custom @Check methods.
-     *
-     * @return true if at least one ERROR issue was discovered, false otherwise.
-     */
-    private static boolean validateModel(Resource resource, Injector injector) {
-        // Fetch the validator registry from the active injector context
-        IResourceValidator validator = injector.getInstance(IResourceValidator.class);
-        // Execute validation on the entire resource using the full verification profile
-        List<Issue> issues = validator.validate(resource, CheckMode.ALL, CancelIndicator.NullImpl);
-        boolean hasErrors = false;
-        for (Issue issue : issues) {
-            switch (issue.getSeverity()) {
-                case ERROR -> {
-                    System.err.printf("[ERROR] Line %d: %s (Code: %s)%n", issue.getLineNumber(), issue.getMessage(), issue.getCode());
-                    hasErrors = true;
-                }
-                case WARNING -> {
-                    System.out.printf("[WARNING] Line %d: %s (Code: %s)%n", issue.getLineNumber(), issue.getMessage(), issue.getCode());
-                }
-                case INFO -> {
-                    System.out.printf("[INFO] Line %d: %s%n", issue.getLineNumber(), issue.getMessage());
-                }
-            }
-        }
-        return hasErrors;
-    }
 
 	private static void printSummary(List<BuildReport> reports, String outputPath) {
 		System.out.println("\n==================================================");

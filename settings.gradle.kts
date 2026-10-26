@@ -27,6 +27,8 @@ include(
 		"language-web",
 		"logic",
 		"opencypher",
+		"opencypher-cli",
+		"opencypher-ide",
 		"store",
 		"store-dse",
 		"store-dse-visualization",

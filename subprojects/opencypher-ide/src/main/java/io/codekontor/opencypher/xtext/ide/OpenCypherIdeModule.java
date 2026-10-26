@@ -20,13 +20,4 @@ import org.eclipse.xtext.ide.editor.contentassist.IdeContentProposalProvider;
  * specifically for the IDE part of the Xtext framework.
  */
 public class OpenCypherIdeModule extends AbstractOpenCypherIdeModule {
-
-	/**
-	 * Binds the custom Content Proposal Provider to the Xtext IDE framework.
-	 *
-	 * @return The class type of the custom proposal provider implementation.
-	 */
-	public Class<? extends IdeContentProposalProvider> bindIdeContentProposalProvider() {
-		return OpenCypherIdeContentProposalProvider.class;
-	}
 }
