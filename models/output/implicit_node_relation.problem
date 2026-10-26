@@ -1,8 +1,0 @@
-class Garage {}
-class Car {}
-class Person {}
-
-pred DRIVES(Person left, Car right).
-
-pred PARKS_IN(Car left, Garage right).
-

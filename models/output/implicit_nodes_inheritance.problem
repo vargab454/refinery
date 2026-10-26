@@ -1,6 +1,0 @@
-class Person {}
-
-class Student extends Person {
-    int studentId
-}
-

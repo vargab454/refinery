@@ -27,3 +27,4 @@ node_modules/
 xtend-gen/
 *.xtendbin
 xtext-gen/
+models/output

@@ -1,3 +1,0 @@
-// Transformation aborted due to validation errors inside 'error_duplicate_property.cypher':
-
-[ERROR] Line 5: Duplicate property 'email' in type definition.
