@@ -95,12 +95,10 @@ public class RefineryModelTransformer {
 				}
 			}
 			if (!warnings.isEmpty()) {
-				out.append("// --- Warnings ---\n");
 				for (String warn : warnings) {
 					out.append("// WARNING: ").append(warn).append("\n");
 				}
 			}
-			out.append("// -------------------------------\n\n");
 		}
 
 		out.append("class Node.\n\n");

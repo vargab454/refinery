@@ -1,2 +1,2 @@
-(:Person) { ssn :: int, name :: string }
-(:Person) { age :: int, email :: string }
+(:Person { ssn :: int, name :: string })
+(:Person { age :: int, email :: string })

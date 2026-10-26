@@ -1,1 +1,1 @@
-(:Student => Person) { studentId :: int }
+(:Student => Person { studentId :: int })

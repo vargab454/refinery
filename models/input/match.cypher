@@ -1,5 +1,5 @@
-(:Person) { SSN :: int }
-(:Student => Person) { studentID :: int }
+(:Person { SSN :: int })
+(:Student => Person { studentID :: int })
 (:Person)-[:FRIEND]->(:Person)
 (:Student)-[:ATTENDS]->(:Course)
 
