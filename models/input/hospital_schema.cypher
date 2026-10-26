@@ -4,5 +4,5 @@
 (:Patient => Person) { medicalHistoryId :: string, admissionDate :: string }
 (:Room) { roomNumber :: int, floor :: int }
 
-(:Doctor)-[:TREATS]->(:Patient) { time :: int}
+(:Doctor)-[:TREATS => { time :: int }]->(:Patient)
 (:Patient)-[:ASSIGNED_TO]->(:Room)

@@ -132,11 +132,19 @@ public class RefineryModelTransformer {
 					referencedParentClasses.add(parentClass);
 				}
 
-				classesBuffer.append("class ").append(className).append(" extends ").append(parentClass).append(" {\n");
-				appendProperties(classesBuffer, nodeType.getProperties());
-				classesBuffer.append("}\n\n");
+				boolean hasProps = nodeType.getProperties() != null
+						&& nodeType.getProperties().getProperties() != null
+						&& !nodeType.getProperties().getProperties().isEmpty();
 
-				// Handle secondary supertypes (Index 1..N) via propagation rules and predicates
+				if (hasProps) {
+					classesBuffer.append("class ").append(className).append(" extends ").append(parentClass).append(" {\n");
+					appendProperties(classesBuffer, nodeType.getProperties());
+					classesBuffer.append("}\n\n");
+				} else {
+					classesBuffer.append("class ").append(className).append(" extends ").append(parentClass).append(".\n\n");
+				}
+
+				// Handle secondary supertypes via propagation rules and predicates
 				if (nodeType.getSuperTypes() != null && nodeType.getSuperTypes().size() > 1) {
 					List<String> additionalSupertypes = nodeType.getSuperTypes().subList(1, nodeType.getSuperTypes().size());
 					propagationRules.put(className, additionalSupertypes);
@@ -168,7 +176,7 @@ public class RefineryModelTransformer {
 		// 3. Auto-declare missing parent classes (Refinery requires extends targets to be actual classes)
 		for (String parentClass : referencedParentClasses) {
 			if (!declaredNodes.contains(parentClass) && !parentClass.equals("Node")) {
-				classesBuffer.append("class ").append(parentClass).append(" extends Node {}\n\n");
+				classesBuffer.append("class ").append(parentClass).append(" extends Node.\n\n");
 				declaredNodes.add(parentClass); // Prevent it from also being generated as a predicate below
 			}
 		}
@@ -228,7 +236,8 @@ public class RefineryModelTransformer {
 			// Ensure all constraint parameters are bound in the implies body
 			for (String param : cInfo.parameters) {
 				if (!iInfo.parameters.contains(param)) {
-					iInfo.conditions.addFirst("Node(" + param + ")");
+					// Prepend Node type guarantee using the new placeholder syntax
+					iInfo.conditions.addFirst("Node({" + param + "})");
 				}
 			}
 
@@ -240,14 +249,16 @@ public class RefineryModelTransformer {
 			out.append("pred constraint").append(currentId).append("(");
 			appendParameterDeclarations(out, cInfo.parameters);
 			out.append(") <-> \n");
-			appendConditions(out, cInfo.conditions);
+			// constraint uses cInfo.parameters as its exported parameters
+			appendConditions(out, cInfo.conditions, cInfo.parameters);
 			out.append(".\n\n");
 
 			// 2. Implies Predicate
 			out.append("pred implication").append(currentId).append("(");
 			appendParameterDeclarations(out, cInfo.parameters);
 			out.append(") <-> \n");
-			appendConditions(out, iInfo.conditions);
+			// implies *also* uses cInfo.parameters as its exported parameters (making 'c' an internal variable)
+			appendConditions(out, iInfo.conditions, cInfo.parameters);
 			out.append(".\n\n");
 
 			// 3. Check Predicate
@@ -262,14 +273,14 @@ public class RefineryModelTransformer {
 			out.append(").\n\n");
 		}
 
-		// 4. Global Force Counterexample Error Rule (Connects all checks with disjunction ';')
+		// 4. Global Force Counterexample Error Rule
 		if (!checkInfos.isEmpty()) {
 			out.append("error forceCounterexample() <-> \n");
 			for (int i = 0; i < checkInfos.size(); i++) {
 				CheckInfo info = checkInfos.get(i);
 				out.append("    !").append(info.name).append("(");
 				for (int j = 0; j < info.parameters.size(); j++) {
-					out.append("_");
+					out.append("_"); // Pure singletons for the global check
 					if (j < info.parameters.size() - 1) out.append(", ");
 				}
 				out.append(")");
@@ -315,7 +326,7 @@ public class RefineryModelTransformer {
 		out.append("pred match").append(matchCounter++).append("(");
 		appendParameterDeclarations(out, info.parameters);
 		out.append(") <-> \n");
-		appendConditions(out, info.conditions);
+		appendConditions(out, info.conditions, info.parameters);
 		out.append(".\n\n");
 	}
 
@@ -328,7 +339,8 @@ public class RefineryModelTransformer {
 
 		if (nodePattern.getNodeLabels() != null && !nodePattern.getNodeLabels().isEmpty()) {
 			for (NodeLabel label : nodePattern.getNodeLabels()) {
-				conditions.add(cleanName(label.getLabelName()) + "(" + varName + ")");
+				// Use placeholders {} for safe variable prefixing later
+				conditions.add(cleanName(label.getLabelName()) + "({" + varName + "})");
 			}
 		}
 		return varName;
@@ -350,15 +362,44 @@ public class RefineryModelTransformer {
 			}
 
 			if (relType != null) {
-				conditions.add(relType + "(" + relVar + ")");
+				// Use placeholders {} for safe variable prefixing later
+				conditions.add(relType + "({" + relVar + "})");
 
 				if (relPattern.isIncoming()) {
-					conditions.add(relType + "::source(" + relVar + ", " + targetVar + ")");
-					conditions.add(relType + "::target(" + relVar + ", " + sourceVar + ")");
+					conditions.add(relType + "::source({" + relVar + "}, {" + targetVar + "})");
+					conditions.add(relType + "::target({" + relVar + "}, {" + sourceVar + "})");
 				} else {
-					conditions.add(relType + "::source(" + relVar + ", " + sourceVar + ")");
-					conditions.add(relType + "::target(" + relVar + ", " + targetVar + ")");
+					conditions.add(relType + "::source({" + relVar + "}, {" + sourceVar + "})");
+					conditions.add(relType + "::target({" + relVar + "}, {" + targetVar + "})");
 				}
+			}
+		}
+	}
+
+	/**
+	 * Replaces variable placeholders with the correct names.
+	 * If a variable is NOT in the exported parameters, it gets prefixed with '_'
+	 * to satisfy Refinery's local existential variable requirements.
+	 */
+	private void appendConditions(StringBuilder out, List<String> conditions, List<String> exportedParams) {
+		java.util.regex.Pattern p = java.util.regex.Pattern.compile("\\{([^}]+)}");
+		for (int i = 0; i < conditions.size(); i++) {
+			String cond = conditions.get(i);
+			java.util.regex.Matcher m = p.matcher(cond);
+			StringBuilder sb = new StringBuilder();
+
+			while (m.find()) {
+				String varName = m.group(1);
+				// If it's an exported parameter, keep it. Otherwise, ensure it starts with an underscore.
+				String formattedVar = exportedParams.contains(varName) ? varName :
+						(varName.startsWith("_") ? varName : "_" + varName);
+				m.appendReplacement(sb, formattedVar);
+			}
+			m.appendTail(sb);
+
+			out.append("    ").append(sb);
+			if (i < conditions.size() - 1) {
+				out.append(", \n");
 			}
 		}
 	}
@@ -374,15 +415,6 @@ public class RefineryModelTransformer {
 		for (int i = 0; i < params.size(); i++) {
 			out.append(params.get(i));
 			if (i < params.size() - 1) out.append(", ");
-		}
-	}
-
-	private void appendConditions(StringBuilder out, List<String> conditions) {
-		for (int i = 0; i < conditions.size(); i++) {
-			out.append("    ").append(conditions.get(i));
-			if (i < conditions.size() - 1) {
-				out.append(", \n");
-			}
 		}
 	}
 
