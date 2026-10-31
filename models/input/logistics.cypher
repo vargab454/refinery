@@ -1,0 +1,20 @@
+(:Person)
+(:Customer => Person)
+(:Courier => Person)
+(:Order)
+(:Product)
+(:Warehouse)
+(:City)
+
+(:Customer)-[:PLACES]->(:Order)
+(:Courier)-[:DELIVERS]->(:Order)
+(:Order)-[:CONTAINS]->(:Product)
+(:Product)-[:STORED_IN]->(:Warehouse)
+(:Person)-[:LOCATED_IN]->(:City)
+(:Warehouse)-[:IS_IN]->(:City)
+
+CONSTRAINT (c: Customer)-[PLACES]->(o: Order)<-[DELIVERS]-(d: Courier)
+IMPLIES (c: Customer)-[LOCATED_IN]->(city: City)<-[LOCATED_IN]-(d: Courier)
+
+CONSTRAINT (c: Customer)-[PLACES]->(o: Order)-[CONTAINS]->(p: Product)-[STORED_IN]->(w: Warehouse)
+IMPLIES (c: Customer)-[LOCATED_IN]->(city: City)<-[IS_IN]-(w: Warehouse)
