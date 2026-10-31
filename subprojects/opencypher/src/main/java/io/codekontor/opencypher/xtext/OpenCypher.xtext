@@ -63,8 +63,8 @@ Statement:
     GraphElement | Command | Query | ConstraintStatement;
 
 ConstraintStatement:
-    'CONSTRAINT' constraintPattern=Pattern
-    'IMPLIES' impliesPattern=Pattern;
+    'CONSTRAINT' constraintPattern=Pattern (constraintWhere=Where)?
+    'IMPLIES' impliesPattern=Pattern (impliesWhere=Where)?;
 
 GraphElement:
     NodeTypeDefinition ({RelationshipTypeDefinition.left=current} Dash '[' rel=RelType (properties=TypePropertyMap)? ']' Dash RightArrowHead '(' ':' right=SYMBOLIC_NAME_X ')')?;
@@ -815,7 +815,7 @@ Atom returns Expression:
     filterExpression=FilterExpression ')' | {Single} 'SINGLE' '(' filterExpression=FilterExpression ')' |
     ShortestPathPattern | RelationshipsPattern | ParenthesizedExpression | FunctionInvocation |
     // TODO
-    {VariableRef} variableRef=[VariableDeclaration|SYMBOLIC_NAME_X];
+    {VariableRef} variableName=SYMBOLIC_NAME_X;
 
 Literal:
 /*

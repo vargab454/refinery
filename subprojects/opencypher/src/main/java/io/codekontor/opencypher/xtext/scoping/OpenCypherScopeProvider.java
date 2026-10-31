@@ -39,24 +39,6 @@ public class OpenCypherScopeProvider extends AbstractOpenCypherScopeProvider {
 	 */
 	@Override
 	public IScope getScope(EObject context, EReference reference) {
-		// Check if we are currently looking for the definition of a variable reference
-		if (context instanceof VariableRef && reference == OpenCypherPackage.eINSTANCE.getVariableRef_VariableRef()) {
-
-			// Collect declarations from three possible sources of variables in Cypher
-			Iterable<VariableDeclaration> elementsFromStatement = extractDeclarationsFromClauses(context);
-			Iterable<VariableDeclaration> elementsFromExpression = extractDeclarationsFromExpression(context);
-			Iterable<VariableDeclaration> elementsFromForeach = extractDeclarationsFromForeach(context);
-
-			// Merge all found declarations into a single list
-			List<VariableDeclaration> allElements = new ArrayList<>();
-			elementsFromExpression.forEach(allElements::add);
-			elementsFromForeach.forEach(allElements::add);
-			elementsFromStatement.forEach(allElements::add);
-
-			// Return a scope containing all valid variable definitions found
-			return Scopes.scopeFor(allElements);
-		}
-
 		// Fallback to default Xtext behavior for other types of references
 		return super.getScope(context, reference);
 	}

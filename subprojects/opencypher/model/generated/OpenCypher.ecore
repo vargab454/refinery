@@ -26,7 +26,11 @@
   <eClassifiers xsi:type="ecore:EClass" name="ConstraintStatement" eSuperTypes="#//Statement">
     <eStructuralFeatures xsi:type="ecore:EReference" name="constraintPattern" eType="#//Pattern"
         containment="true"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="constraintWhere" eType="#//Where"
+        containment="true"/>
     <eStructuralFeatures xsi:type="ecore:EReference" name="impliesPattern" eType="#//Pattern"
+        containment="true"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="impliesWhere" eType="#//Where"
         containment="true"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="GraphElement" eSuperTypes="#//Statement">
@@ -710,7 +714,7 @@
         containment="true"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="VariableRef" eSuperTypes="#//Expression">
-    <eStructuralFeatures xsi:type="ecore:EReference" name="variableRef" eType="#//VariableDeclaration"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="variableName" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
   </eClassifiers>
   <eClassifiers xsi:type="ecore:EClass" name="NULL" eSuperTypes="#//Literal"/>
 </ecore:EPackage>

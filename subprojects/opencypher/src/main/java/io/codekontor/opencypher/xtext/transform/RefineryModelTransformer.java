@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.eclipse.emf.ecore.EObject;
 import org.eclipse.xtext.EcoreUtil2;
 import org.eclipse.xtext.resource.XtextResource;
 import org.eclipse.xtext.resource.IResourceServiceProvider;
@@ -41,6 +42,7 @@ public class RefineryModelTransformer {
 	private static class PatternInfo {
 		List<String> parameters = new ArrayList<>();
 		List<String> conditions = new ArrayList<>();
+		Map<String, String> varTypes = new LinkedHashMap<>();
 	}
 
 	private static class CheckInfo {
@@ -52,16 +54,13 @@ public class RefineryModelTransformer {
 		}
 	}
 
-	public String convertToRefinery(Cypher model) {
+	public String convertToRefinery(Cypher model, boolean isCwa) {
 		if (model == null) return "// Error: Model root container is empty.";
 
-		// Reset counters so numbering starts fresh for each file/conversion run
 		this.matchCounter = 1;
 		this.constraintCounter = 1;
 
 		StringBuilder out = new StringBuilder();
-
-		// 1. Extract and append ALL validations (Syntax + Semantic) with line numbers via Xtext Validator
 		Set<String> errors = new HashSet<>();
 		Set<String> warnings = new HashSet<>();
 
@@ -86,7 +85,6 @@ public class RefineryModelTransformer {
 			}
 		}
 
-		// Print captured issues as comments
 		if (!errors.isEmpty() || !warnings.isEmpty()) {
 			if (!errors.isEmpty()) {
 				out.append("// --- Syntax / Semantic Errors ---\n");
@@ -95,18 +93,23 @@ public class RefineryModelTransformer {
 				}
 			}
 			if (!warnings.isEmpty()) {
+				out.append("// --- Warnings ---\n");
 				for (String warn : warnings) {
 					out.append("// WARNING: ").append(warn).append("\n");
 				}
 			}
+			out.append("// -------------------------------\n\n");
 		}
 
-		out.append("class Node.\n\n");
+		// CWA és OWA alapján absztrakt vagy konkrét csomópont ősosztály
+		if (isCwa) {
+			out.append("abstract class Node.\n\n");
+		} else {
+			out.append("class Node.\n\n");
+		}
 
 		Map<String, List<String>> propagationRules = new LinkedHashMap<>();
 		Set<String> declaredNodes = new HashSet<>();
-
-		// Track references separately: parent classes MUST be classes, while inferred relations are predicates
 		Set<String> referencedParentClasses = new HashSet<>();
 		Set<String> referencedNodes = new HashSet<>();
 
@@ -114,16 +117,13 @@ public class RefineryModelTransformer {
 		StringBuilder relationshipsBuffer = new StringBuilder();
 		boolean hasRelationships = false;
 
-		// 2. Process Node and Relationship Definitions
 		for (Statement statement : model.getStatements()) {
-
 			if (statement instanceof NodeTypeDefinition nodeType && !(nodeType instanceof RelationshipTypeDefinition)) {
 				String className = nodeType.getName();
 				if (className == null) continue;
 
 				declaredNodes.add(className);
 
-				// Handle primary native inheritance (Index 0)
 				String parentClass = "Node";
 				if (nodeType.getSuperTypes() != null && !nodeType.getSuperTypes().isEmpty()) {
 					parentClass = cleanName(nodeType.getSuperTypes().getFirst());
@@ -142,7 +142,6 @@ public class RefineryModelTransformer {
 					classesBuffer.append("class ").append(className).append(" extends ").append(parentClass).append(".\n\n");
 				}
 
-				// Handle secondary supertypes via propagation rules and predicates
 				if (nodeType.getSuperTypes() != null && nodeType.getSuperTypes().size() > 1) {
 					List<String> additionalSupertypes = nodeType.getSuperTypes().subList(1, nodeType.getSuperTypes().size());
 					propagationRules.put(className, additionalSupertypes);
@@ -159,7 +158,6 @@ public class RefineryModelTransformer {
 
 				if (sourceClass == null || targetClass == null) continue;
 
-				// Track nodes for type inference as predicates
 				referencedNodes.add(cleanName(sourceClass));
 				referencedNodes.add(cleanName(targetClass));
 
@@ -171,24 +169,25 @@ public class RefineryModelTransformer {
 			}
 		}
 
-		// 3. Auto-declare missing parent classes (Refinery requires extends targets to be actual classes)
 		for (String parentClass : referencedParentClasses) {
 			if (!declaredNodes.contains(parentClass) && !parentClass.equals("Node")) {
 				classesBuffer.append("class ").append(parentClass).append(" extends Node.\n\n");
-				declaredNodes.add(parentClass); // Prevent it from also being generated as a predicate below
+				declaredNodes.add(parentClass);
 			}
 		}
 
 		out.append(classesBuffer);
 
-		// 4. Generate Predicates exclusively for undeclared (inferred) types (like relationship endpoints)
 		for (String refNode : referencedNodes) {
 			if (!declaredNodes.contains(refNode)) {
-				out.append("pred ").append(refNode).append("(Node n).\n\n");
+				if (isCwa) {
+					out.append("class ").append(refNode).append(" extends Node.\n\n");
+				} else {
+					out.append("pred ").append(refNode).append("(Node n).\n\n");
+				}
 			}
 		}
 
-		// 5. Output Propagation Rules (for secondary supertypes only)
 		for (Map.Entry<String, List<String>> entry : propagationRules.entrySet()) {
 			String className = entry.getKey();
 			List<String> superTypes = entry.getValue();
@@ -203,13 +202,11 @@ public class RefineryModelTransformer {
 			out.append(".\n\n");
 		}
 
-		// 6. Output Relationship Classes
 		if (hasRelationships) {
 			out.append("abstract class RELATIONSHIP.\n\n");
 			out.append(relationshipsBuffer);
 		}
 
-		// 7. Process Queries (MATCH clauses) and Constraints (CONSTRAINT ... IMPLIES ...)
 		processQueries(model, out);
 		processConstraints(model, out);
 
@@ -219,7 +216,7 @@ public class RefineryModelTransformer {
 	private void processQueries(Cypher model, StringBuilder out) {
 		List<Match> matchClauses = EcoreUtil2.getAllContentsOfType(model, Match.class);
 		for (Match match : matchClauses) {
-			processMatchPattern(match.getPattern(), out);
+			processMatchPattern(match.getPattern(), match.getWhere(), out);
 		}
 	}
 
@@ -228,13 +225,11 @@ public class RefineryModelTransformer {
 		List<CheckInfo> checkInfos = new ArrayList<>();
 
 		for (ConstraintStatement stmt : constraints) {
-			PatternInfo cInfo = extractPatternInfo(stmt.getConstraintPattern());
-			PatternInfo iInfo = extractPatternInfo(stmt.getImpliesPattern());
+			PatternInfo cInfo = extractPatternInfo(stmt.getConstraintPattern(), stmt.getConstraintWhere());
+			PatternInfo iInfo = extractPatternInfo(stmt.getImpliesPattern(), stmt.getImpliesWhere());
 
-			// Ensure all constraint parameters are bound in the implies body
 			for (String param : cInfo.parameters) {
 				if (!iInfo.parameters.contains(param)) {
-					// Prepend Node type guarantee using the new placeholder syntax
 					iInfo.conditions.addFirst("Node({" + param + "})");
 				}
 			}
@@ -243,23 +238,18 @@ public class RefineryModelTransformer {
 			String checkName = "check" + currentId;
 			checkInfos.add(new CheckInfo(checkName, cInfo.parameters));
 
-			// 1. Constraint Predicate
 			out.append("pred constraint").append(currentId).append("(");
 			appendParameterDeclarations(out, cInfo.parameters);
 			out.append(") <-> \n");
-			// constraint uses cInfo.parameters as its exported parameters
 			appendConditions(out, cInfo.conditions, cInfo.parameters);
 			out.append(".\n\n");
 
-			// 2. Implies Predicate
 			out.append("pred implication").append(currentId).append("(");
 			appendParameterDeclarations(out, cInfo.parameters);
 			out.append(") <-> \n");
-			// implies *also* uses cInfo.parameters as its exported parameters (making 'c' an internal variable)
 			appendConditions(out, iInfo.conditions, cInfo.parameters);
 			out.append(".\n\n");
 
-			// 3. Check Predicate
 			out.append("pred ").append(checkName).append("(");
 			appendParameterDeclarations(out, cInfo.parameters);
 			out.append(") <-> \n");
@@ -271,14 +261,13 @@ public class RefineryModelTransformer {
 			out.append(").\n\n");
 		}
 
-		// 4. Global Force Counterexample Error Rule
 		if (!checkInfos.isEmpty()) {
 			out.append("error forceCounterexample() <-> \n");
 			for (int i = 0; i < checkInfos.size(); i++) {
 				CheckInfo info = checkInfos.get(i);
 				out.append("    !").append(info.name).append("(");
 				for (int j = 0; j < info.parameters.size(); j++) {
-					out.append("_"); // Pure singletons for the global check
+					out.append("_");
 					if (j < info.parameters.size() - 1) out.append(", ");
 				}
 				out.append(")");
@@ -290,11 +279,10 @@ public class RefineryModelTransformer {
 		}
 	}
 
-	private PatternInfo extractPatternInfo(Pattern pattern) {
+	private PatternInfo extractPatternInfo(Pattern pattern, Where where) {
 		PatternInfo info = new PatternInfo();
 		if (pattern == null || pattern.getPatterns().isEmpty()) return info;
 
-		// Reset relationship counter independently for each pattern block
 		anonVarCounter = 1;
 
 		for (PatternPart part : pattern.getPatterns()) {
@@ -306,19 +294,24 @@ public class RefineryModelTransformer {
 			}
 
 			if (pe != null) {
-				String sourceVar = processNodePattern(pe.getNodepattern(), info.parameters, info.conditions);
+				String sourceVar = processNodePattern(pe.getNodepattern(), info.parameters, info.conditions, info.varTypes);
 				for (PatternElementChain chain : pe.getChain()) {
-					String targetVar = processNodePattern(chain.getNodePattern(), info.parameters, info.conditions);
-					processRelationshipPattern(chain.getRelationshipPattern(), sourceVar, targetVar, info.conditions);
+					String targetVar = processNodePattern(chain.getNodePattern(), info.parameters, info.conditions, info.varTypes);
+					processRelationshipPattern(chain.getRelationshipPattern(), sourceVar, targetVar, info.conditions, info.varTypes);
 					sourceVar = targetVar;
 				}
 			}
 		}
+
+		if (where != null && where.getExpression() != null) {
+			flattenAnds(where.getExpression(), info.conditions, info.varTypes);
+		}
+
 		return info;
 	}
 
-	private void processMatchPattern(Pattern pattern, StringBuilder out) {
-		PatternInfo info = extractPatternInfo(pattern);
+	private void processMatchPattern(Pattern pattern, Where where, StringBuilder out) {
+		PatternInfo info = extractPatternInfo(pattern, where);
 		if (info.parameters.isEmpty() && info.conditions.isEmpty()) return;
 
 		out.append("pred match").append(matchCounter++).append("(");
@@ -328,7 +321,7 @@ public class RefineryModelTransformer {
 		out.append(".\n\n");
 	}
 
-	private String processNodePattern(NodePattern nodePattern, List<String> parameters, List<String> conditions) {
+	private String processNodePattern(NodePattern nodePattern, List<String> parameters, List<String> conditions, Map<String, String> varTypes) {
 		String varName = nodePattern.getVariable() != null ? nodePattern.getVariable().getName() : "n_anon_" + (anonVarCounter++);
 
 		if (!parameters.contains(varName)) {
@@ -336,15 +329,17 @@ public class RefineryModelTransformer {
 		}
 
 		if (nodePattern.getNodeLabels() != null && !nodePattern.getNodeLabels().isEmpty()) {
+			varTypes.put(varName, cleanName(nodePattern.getNodeLabels().get(0).getLabelName()));
 			for (NodeLabel label : nodePattern.getNodeLabels()) {
-				// Use placeholders {} for safe variable prefixing later
 				conditions.add(cleanName(label.getLabelName()) + "({" + varName + "})");
 			}
+		} else {
+			varTypes.putIfAbsent(varName, "Node");
 		}
 		return varName;
 	}
 
-	private void processRelationshipPattern(RelationshipPattern relPattern, String sourceVar, String targetVar, List<String> conditions) {
+	private void processRelationshipPattern(RelationshipPattern relPattern, String sourceVar, String targetVar, List<String> conditions, Map<String, String> varTypes) {
 		if (relPattern.getDetail() != null) {
 			RelationshipDetail detail = relPattern.getDetail();
 			String relType = null;
@@ -352,15 +347,14 @@ public class RefineryModelTransformer {
 
 			if (detail.getRelTypeNames() != null && !detail.getRelTypeNames().isEmpty()) {
 				relType = cleanName(detail.getRelTypeNames().getFirst());
-				relVar = detail.getVariable() != null ?
-						detail.getVariable().getName() : "relationship" + (anonVarCounter++);
+				relVar = detail.getVariable() != null ? detail.getVariable().getName() : "relationship" + (anonVarCounter++);
 			} else if (detail.getVariable() != null) {
 				relType = cleanName(detail.getVariable().getName());
 				relVar = "relationship" + (anonVarCounter++);
 			}
 
 			if (relType != null) {
-				// Use placeholders {} for safe variable prefixing later
+				varTypes.put(relVar, relType);
 				conditions.add(relType + "({" + relVar + "})");
 
 				if (relPattern.isIncoming()) {
@@ -374,11 +368,97 @@ public class RefineryModelTransformer {
 		}
 	}
 
-	/**
-	 * Replaces variable placeholders with the correct names.
-	 * If a variable is NOT in the exported parameters, it gets prefixed with '_'
-	 * to satisfy Refinery's local existential variable requirements.
-	 */
+	private void flattenAnds(Expression expr, List<String> conditions, Map<String, String> varTypes) {
+		if (expr instanceof AndExpression andExpr) {
+			flattenAnds(andExpr.getLeft(), conditions, varTypes);
+			flattenAnds(andExpr.getRight(), conditions, varTypes);
+		} else {
+			String exprStr = processExpression(expr, varTypes);
+			if (!exprStr.isEmpty()) {
+				conditions.add(exprStr);
+			}
+		}
+	}
+
+	private String getVariableName(Expression expr) {
+		if (expr instanceof VariableRef varRef && varRef.getVariableName() != null) {
+			return varRef.getVariableName();
+		}
+		for (EObject child : expr.eContents()) {
+			if (child instanceof Expression childExpr) {
+				String res = getVariableName(childExpr);
+				if (!res.isEmpty()) return res;
+			}
+		}
+		return "";
+	}
+
+	private String processExpression(EObject expr, Map<String, String> varTypes) {
+		if (expr == null) return "";
+
+		if (expr instanceof ComparisonExpression compExpr) {
+			String op = compExpr.getOperator();
+			String leftStr = processExpression(compExpr.getLeft(), varTypes);
+			String rightStr = processExpression(compExpr.getRight(), varTypes);
+
+			// Map Cypher's single '=' to Refinery's '=='
+			if ("=".equals(op)) op = "==";
+			else if ("<>".equals(op)) op = "!=";
+
+			// Generates e.g. Doctor::specialty({d}) == "Surgery"
+			return leftStr + " " + op + " " + rightStr;
+		}
+
+		if (expr instanceof PropertyLookupExpression propExpr) {
+			String varName = getVariableName(propExpr.getLeft());
+			String propName = propExpr.getPropertyLookups().get(0).getPropertyKeyName();
+			String type = varTypes.getOrDefault(varName, "Node");
+
+			// Attributes in Refinery are arity-1 functions: ClassName::propertyName(variable)
+			return type + "::" + propName + "({" + varName + "})";
+		}
+
+		if (expr instanceof OrExpression orExpr) {
+			return "(" + processExpression(orExpr.getLeft(), varTypes) + " ; " + processExpression(orExpr.getRight(), varTypes) + ")";
+		}
+
+		if (expr instanceof NotExpression notExpr) {
+			return "!(" + processExpression(notExpr.getLeft(), varTypes) + ")";
+		}
+
+		if (expr instanceof VariableRef varRef) {
+			if (varRef.getVariableName() != null) {
+				return "{" + varRef.getVariableName() + "}";
+			}
+		}
+
+		if (expr instanceof StringLiteral strLit) {
+			return strLit.getValue(); // Already includes quotes
+		}
+
+		if (expr instanceof NumberLiteral numLit) {
+			return numLit.getValue();
+		}
+
+		if (expr instanceof BooleanLiteral boolLit) {
+			return boolLit.getValue().toLowerCase(); // true/false
+		}
+
+		if (expr instanceof ParenthesizedExpression parenExpr) {
+			return "(" + processExpression(parenExpr.getExpression(), varTypes) + ")";
+		}
+
+		// Fallback traversal for wrapper nodes
+		for (EObject child : expr.eContents()) {
+			String res = processExpression(child, varTypes);
+			if (res != null && !res.isEmpty()) {
+				return res;
+			}
+		}
+
+		return "";
+	}
+
 	private void appendConditions(StringBuilder out, List<String> conditions, List<String> exportedParams) {
 		java.util.regex.Pattern p = java.util.regex.Pattern.compile("\\{([^}]+)}");
 		for (int i = 0; i < conditions.size(); i++) {
@@ -388,10 +468,10 @@ public class RefineryModelTransformer {
 
 			while (m.find()) {
 				String varName = m.group(1);
-				// If it's an exported parameter, keep it. Otherwise, ensure it starts with an underscore.
-				String formattedVar = exportedParams.contains(varName) ? varName :
-						(varName.startsWith("_") ? varName : "_" + varName);
-				m.appendReplacement(sb, formattedVar);
+
+				// We no longer add an underscore. Refinery automatically treats
+				// variables not in the parameter list as local existential variables.
+				m.appendReplacement(sb, varName);
 			}
 			m.appendTail(sb);
 
@@ -433,7 +513,7 @@ public class RefineryModelTransformer {
 		if (cypherType == null) return "string";
 		return switch (cypherType.toUpperCase()) {
 			case "INTEGER", "INT", "DATE" -> "int";
-			case "BOOLEAN", "BOOL" -> "bool";
+			case "BOOLEAN", "BOOL" -> "boolean";
 			case "FLOAT", "DOUBLE", "REAL" -> "real";
 			default -> "string";
 		};

@@ -26,7 +26,9 @@
     <genClasses ecoreClass="OpenCypher.ecore#//Statement"/>
     <genClasses ecoreClass="OpenCypher.ecore#//ConstraintStatement">
       <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//ConstraintStatement/constraintPattern"/>
+      <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//ConstraintStatement/constraintWhere"/>
       <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//ConstraintStatement/impliesPattern"/>
+      <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//ConstraintStatement/impliesWhere"/>
     </genClasses>
     <genClasses ecoreClass="OpenCypher.ecore#//GraphElement">
       <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//GraphElement/properties"/>
@@ -532,7 +534,7 @@
       <genFeatures property="None" children="true" createChild="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//Single/filterExpression"/>
     </genClasses>
     <genClasses ecoreClass="OpenCypher.ecore#//VariableRef">
-      <genFeatures notify="false" createChild="false" propertySortChoices="true" ecoreFeature="ecore:EReference OpenCypher.ecore#//VariableRef/variableRef"/>
+      <genFeatures createChild="false" ecoreFeature="ecore:EAttribute OpenCypher.ecore#//VariableRef/variableName"/>
     </genClasses>
     <genClasses ecoreClass="OpenCypher.ecore#//NULL"/>
   </genPackages>

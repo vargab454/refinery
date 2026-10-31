@@ -63,33 +63,44 @@ public class OpenCypherCli {
 		ResourceSet resourceSet = injector.getInstance(ResourceSet.class);
 		IResourceValidator validator = injector.getInstance(IResourceValidator.class);
 		RefineryModelTransformer transformer = new RefineryModelTransformer();
+
 		File inputDir = new File("models/input");
-		File outputDir = new File("models/output");
+		File outputDirOwa = new File("models/output/OWA");
+		File outputDirCwa = new File("models/output/CWA");
+
 		if (!inputDir.exists()) inputDir.mkdirs();
-		if (!outputDir.exists()) outputDir.mkdirs();
+		if (!outputDirOwa.exists()) outputDirOwa.mkdirs();
+		if (!outputDirCwa.exists()) outputDirCwa.mkdirs();
+
 		File[] inputFiles = inputDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".cypher"));
 		if (inputFiles == null || inputFiles.length == 0) {
 			System.out.println(ANSI_YELLOW + "[WARN] No '.cypher' files found in: " + inputDir.getAbsolutePath() + ANSI_RESET);
 			return;
 		}
+
 		System.out.println("\n[START] Batch transformation initiated...");
 		List<BuildReport> reports = new ArrayList<>();
+
 		for (File inputFile : inputFiles) {
 			String fileName = inputFile.getName();
 			String baseName = fileName.substring(0, fileName.lastIndexOf('.'));
-			File outputFile = new File(outputDir, baseName + ".problem");
+			File outputFileOwa = new File(outputDirOwa, baseName + ".problem");
+			File outputFileCwa = new File(outputDirCwa, baseName + ".problem");
+
 			try {
 				URI fileURI = URI.createFileURI(inputFile.getAbsolutePath());
 				Resource resource = resourceSet.getResource(fileURI, true);
 				List<Issue> issues = validator.validate(resource, CheckMode.ALL, null);
+
 				long errorCount = issues.stream().filter(i -> i.getSeverity() == org.eclipse.xtext.diagnostics.Severity.ERROR).count();
 				long warningCount = issues.stream().filter(i -> i.getSeverity() == org.eclipse.xtext.diagnostics.Severity.WARNING).count();
+
 				BuildReport report;
-				String finalOutputContent;
 				if (errorCount > 0) {
 					report = new BuildReport(fileName, TransformationResult.ERROR);
 					report.errorCount = (int) errorCount;
 					report.warningCount = (int) warningCount;
+
 					StringBuilder errorLog = new StringBuilder();
 					errorLog.append("// Transformation aborted due to validation errors inside '").append(fileName).append("':\n\n");
 					for (Issue issue : issues) {
@@ -97,21 +108,28 @@ public class OpenCypherCli {
 							errorLog.append("[ERROR] Line ").append(issue.getLineNumber()).append(": ").append(issue.getMessage()).append("\n");
 						}
 					}
-					finalOutputContent = errorLog.toString();
-				} else if (warningCount > 0) {
-					report = new BuildReport(fileName, TransformationResult.WARNING);
-					report.warningCount = (int) warningCount;
-					Cypher model = (Cypher) resource.getContents().getFirst();
-					finalOutputContent = transformer.convertToRefinery(model);
+
+					String errorOutput = errorLog.toString();
+					try (FileWriter w1 = new FileWriter(outputFileOwa); FileWriter w2 = new FileWriter(outputFileCwa)) {
+						w1.write(errorOutput);
+						w2.write(errorOutput);
+					}
 				} else {
-					report = new BuildReport(fileName, TransformationResult.SUCCESS);
+					report = new BuildReport(fileName, warningCount > 0 ? TransformationResult.WARNING : TransformationResult.SUCCESS);
+					report.warningCount = (int) warningCount;
+
 					Cypher model = (Cypher) resource.getContents().getFirst();
-					finalOutputContent = transformer.convertToRefinery(model);
+
+					String owaContent = transformer.convertToRefinery(model, false);
+					String cwaContent = transformer.convertToRefinery(model, true);
+
+					try (FileWriter w1 = new FileWriter(outputFileOwa); FileWriter w2 = new FileWriter(outputFileCwa)) {
+						w1.write(owaContent);
+						w2.write(cwaContent);
+					}
 				}
 				reports.add(report);
-				try (FileWriter writer = new FileWriter(outputFile)) {
-					writer.write(finalOutputContent);
-				}
+
 			} catch (Exception e) {
 				BuildReport criticalReport = new BuildReport(fileName, TransformationResult.ERROR);
 				criticalReport.errorCount = 1;
@@ -119,7 +137,7 @@ public class OpenCypherCli {
 				System.err.println("[CRITICAL ERROR] " + fileName + ": " + e.getMessage());
 			}
 		}
-		printSummary(reports, outputDir.getAbsolutePath());
+		printSummary(reports, "models/output (OWA & CWA)");
 	}
 
 	private static void printSummary(List<BuildReport> reports, String outputPath) {
