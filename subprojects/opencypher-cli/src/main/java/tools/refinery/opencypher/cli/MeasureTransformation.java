@@ -12,6 +12,7 @@ import com.google.inject.Injector;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -52,6 +53,8 @@ public class MeasureTransformation {
 	private static final int[] ITERATION_COUNTS = { 10, 20, 30 };
 	private static final long TIMEOUT_SECONDS = 300;
 
+	private static final long BASE_SEED = 42L;
+
 	private record TransformRecord(String problemName, double owaTimeMs, double cwaTimeMs) {}
 	private record SummaryRecord(String fileName, String sizeName, int targetIterations, double avgRunTimeMs, int timeouts) {}
 
@@ -75,6 +78,8 @@ public class MeasureTransformation {
 			logAndPrint(writer, "==================================================");
 			logAndPrint(writer, "MEASUREMENT STARTED: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 			logAndPrint(writer, "==================================================\n");
+
+			long currentGlobalSeed = BASE_SEED;
 
 			for (String problemName : PROBLEM_NAMES) {
 				logAndPrint(writer, ">>> Processing problem set: " + problemName);
@@ -130,7 +135,8 @@ public class MeasureTransformation {
 
 							logAndPrint(writer, "  [INFO] Starting " + WARMUP_ITERATIONS + " warmup iterations...");
 							for (int i = 1; i <= WARMUP_ITERATIONS; i++) {
-								runWithTimeout(executor, contentWithScope, writer, "Warmup " + i);
+								currentGlobalSeed++;
+								runWithTimeout(executor, contentWithScope, currentGlobalSeed, writer, "Warmup " + i + " (Seed: " + currentGlobalSeed + ")");
 							}
 
 							logAndPrint(writer, "  [INFO] Starting " + measureIterations + " measurement iterations...");
@@ -138,7 +144,9 @@ public class MeasureTransformation {
 							int successfulIterations = 0;
 
 							for (int i = 1; i <= measureIterations; i++) {
-								long runTime = runWithTimeout(executor, contentWithScope, writer, "Iteration " + i);
+								currentGlobalSeed++;
+								String label = String.format("Iteration %d (Seed: %d)", i, currentGlobalSeed);
+								long runTime = runWithTimeout(executor, contentWithScope, currentGlobalSeed, writer, label);
 
 								if (runTime >= 0) {
 									sumRunTimeNano += runTime;
@@ -196,11 +204,11 @@ public class MeasureTransformation {
 		}
 	}
 
-	private static long runWithTimeout(ExecutorService executor, String refineryProblem, PrintWriter writer, String iterationLabel) {
+	private static long runWithTimeout(ExecutorService executor, String refineryProblem, long seed, PrintWriter writer, String iterationLabel) {
 		long startTime = System.nanoTime();
 
 		Future<Void> future = executor.submit(() -> {
-			runRefinery(refineryProblem);
+			runRefinery(refineryProblem, seed);
 			return null;
 		});
 
@@ -227,9 +235,23 @@ public class MeasureTransformation {
 		}
 	}
 
-	private static void runRefinery(String refineryProblem) throws Exception {
+	private static void runRefinery(String refineryProblem, long seed) throws Exception {
 		var problem = StandaloneRefinery.getProblemLoader().loadString(refineryProblem);
 		try (var generator = StandaloneRefinery.getGeneratorFactory().createGenerator(problem)) {
+
+			try {
+				Class<?> currentClass = generator.getClass();
+				while (currentClass != null) {
+					for (Field field : currentClass.getDeclaredFields()) {
+						if ((field.getName().toLowerCase().contains("seed")) && (field.getType() == long.class || field.getType() == Long.class)) {
+							field.setAccessible(true);
+							field.set(generator, seed);
+						}
+					}
+					currentClass = currentClass.getSuperclass();
+				}
+			} catch (Exception _) {}
+
 			generator.generate();
 		}
 	}

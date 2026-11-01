@@ -1,6 +1,6 @@
 /*
  * openCypher Xtext - Slizaa Static Software Analysis Tools
- * Copyright © ${year} Code-Kontor GmbH and others (slizaa@codekontor.io)
+ * Copyright © 2024 Code-Kontor GmbH and others (slizaa@codekontor.io)
  *
  * This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License 2.0 which is available at
@@ -101,92 +101,113 @@ public class RefineryModelTransformer {
 			out.append("// -------------------------------\n\n");
 		}
 
-		// CWA és OWA alapján absztrakt vagy konkrét csomópont ősosztály
 		if (isCwa) {
 			out.append("abstract class Node.\n\n");
 		} else {
 			out.append("class Node.\n\n");
 		}
 
+		Set<String> explicitClasses = new HashSet<>();
+		Set<String> allReferencedTypes = new HashSet<>();
 		Map<String, List<String>> propagationRules = new LinkedHashMap<>();
-		Set<String> declaredNodes = new HashSet<>();
-		Set<String> referencedParentClasses = new HashSet<>();
-		Set<String> referencedNodes = new HashSet<>();
+
+		for (Statement stmt : model.getStatements()) {
+			if (stmt instanceof NodeTypeDefinition nodeType && !(nodeType instanceof RelationshipTypeDefinition)) {
+				if (nodeType.getName() != null) {
+					explicitClasses.add(cleanName(nodeType.getName()));
+				}
+				if (nodeType.getSuperTypes() != null) {
+					for (String st : nodeType.getSuperTypes()) {
+						allReferencedTypes.add(cleanName(st));
+					}
+				}
+			} else if (stmt instanceof RelationshipTypeDefinition rel) {
+				if (rel.getLeft() != null) explicitClasses.add(cleanName(rel.getLeft().getName()));
+				if (rel.getRight() != null) explicitClasses.add(cleanName(rel.getRight()));
+			}
+		}
+
+		List<NodeLabel> allLabels = EcoreUtil2.getAllContentsOfType(model, NodeLabel.class);
+		for (NodeLabel label : allLabels) {
+			allReferencedTypes.add(cleanName(label.getLabelName()));
+		}
+		allReferencedTypes.addAll(explicitClasses);
 
 		StringBuilder classesBuffer = new StringBuilder();
 		StringBuilder relationshipsBuffer = new StringBuilder();
 		boolean hasRelationships = false;
 
+		Set<String> generatedClasses = new HashSet<>();
+
 		for (Statement statement : model.getStatements()) {
 			if (statement instanceof NodeTypeDefinition nodeType && !(nodeType instanceof RelationshipTypeDefinition)) {
-				String className = nodeType.getName();
-				if (className == null) continue;
+				String className = cleanName(nodeType.getName());
+				if (className.isEmpty()) continue;
 
-				declaredNodes.add(className);
+				generatedClasses.add(className);
+				List<String> classSupertypes = new ArrayList<>();
+				List<String> predSupertypes = new ArrayList<>();
 
-				String parentClass = "Node";
-				if (nodeType.getSuperTypes() != null && !nodeType.getSuperTypes().isEmpty()) {
-					parentClass = cleanName(nodeType.getSuperTypes().getFirst());
-					referencedParentClasses.add(parentClass);
+				if (nodeType.getSuperTypes() != null) {
+					for (String st : nodeType.getSuperTypes()) {
+						String cleanSt = cleanName(st);
+						if (isCwa || explicitClasses.contains(cleanSt)) {
+							classSupertypes.add(cleanSt);
+						} else {
+							predSupertypes.add(cleanSt);
+						}
+					}
 				}
 
+				String extendsClause = classSupertypes.isEmpty() ? "Node" : String.join(", ", classSupertypes);
 				boolean hasProps = nodeType.getProperties() != null
 						&& nodeType.getProperties().getProperties() != null
 						&& !nodeType.getProperties().getProperties().isEmpty();
 
 				if (hasProps) {
-					classesBuffer.append("class ").append(className).append(" extends ").append(parentClass).append(" {\n");
+					classesBuffer.append("class ").append(className).append(" extends ").append(extendsClause).append(" {\n");
 					appendProperties(classesBuffer, nodeType.getProperties());
 					classesBuffer.append("}\n\n");
 				} else {
-					classesBuffer.append("class ").append(className).append(" extends ").append(parentClass).append(".\n\n");
+					classesBuffer.append("class ").append(className).append(" extends ").append(extendsClause).append(".\n\n");
 				}
 
-				if (nodeType.getSuperTypes() != null && nodeType.getSuperTypes().size() > 1) {
-					List<String> additionalSupertypes = nodeType.getSuperTypes().subList(1, nodeType.getSuperTypes().size());
-					propagationRules.put(className, additionalSupertypes);
-					for (String superType : additionalSupertypes) {
-						referencedNodes.add(cleanName(superType));
-					}
+				if (!predSupertypes.isEmpty()) {
+					propagationRules.put(className, predSupertypes);
 				}
 			}
 			else if (statement instanceof RelationshipTypeDefinition rel) {
 				hasRelationships = true;
-				String sourceClass = rel.getLeft() != null ? rel.getLeft().getName() : null;
-				String targetClass = rel.getRight();
-				String relationName = rel.getRel();
+				String sourceClass = rel.getLeft() != null ? cleanName(rel.getLeft().getName()) : "Node";
+				String targetClass = rel.getRight() != null ? cleanName(rel.getRight()) : "Node";
+				String relationName = cleanName(rel.getRel());
 
-				if (sourceClass == null || targetClass == null) continue;
-
-				referencedNodes.add(cleanName(sourceClass));
-				referencedNodes.add(cleanName(targetClass));
-
-				relationshipsBuffer.append("class ").append(cleanName(relationName)).append(" extends RELATIONSHIP {\n");
-				relationshipsBuffer.append("    ").append(cleanName(sourceClass)).append("[1] source\n");
-				relationshipsBuffer.append("    ").append(cleanName(targetClass)).append("[1] target\n");
+				relationshipsBuffer.append("class ").append(relationName).append(" extends RELATIONSHIP {\n");
+				relationshipsBuffer.append("    ").append(sourceClass).append("[1] source\n");
+				relationshipsBuffer.append("    ").append(targetClass).append("[1] target\n");
 				appendProperties(relationshipsBuffer, rel.getProperties());
 				relationshipsBuffer.append("}\n\n");
 			}
 		}
 
-		for (String parentClass : referencedParentClasses) {
-			if (!declaredNodes.contains(parentClass) && !parentClass.equals("Node")) {
-				classesBuffer.append("class ").append(parentClass).append(" extends Node.\n\n");
-				declaredNodes.add(parentClass);
+		for (String explicit : explicitClasses) {
+			if (!generatedClasses.contains(explicit)) {
+				classesBuffer.append("class ").append(explicit).append(" extends Node.\n\n");
+				generatedClasses.add(explicit);
+			}
+		}
+
+		for (String type : allReferencedTypes) {
+			if (!explicitClasses.contains(type)) {
+				if (isCwa) {
+					classesBuffer.append("class ").append(type).append(" extends Node.\n\n");
+				} else {
+					classesBuffer.append("pred ").append(type).append("(Node n).\n\n");
+				}
 			}
 		}
 
 		out.append(classesBuffer);
-
-		for (String refNode : referencedNodes) {
-			if (!declaredNodes.contains(refNode)) {
-				if (isCwa) {
-					out.append("class ").append(refNode).append(" extends Node.\n\n");
-				} else {
-					out.append("pred ").append(refNode).append("(Node n).\n\n");
-				}
-			}
-		}
 
 		for (Map.Entry<String, List<String>> entry : propagationRules.entrySet()) {
 			String className = entry.getKey();
@@ -196,7 +217,7 @@ public class RefineryModelTransformer {
 			out.append("propagation rule ").append(ruleName).append("(").append(className).append(" p) ==> ");
 
 			for (int i = 0; i < superTypes.size(); i++) {
-				out.append(cleanName(superTypes.get(i))).append("(p)");
+				out.append(superTypes.get(i)).append("(p)");
 				if (i < superTypes.size() - 1) out.append(", ");
 			}
 			out.append(".\n\n");
@@ -401,11 +422,9 @@ public class RefineryModelTransformer {
 			String leftStr = processExpression(compExpr.getLeft(), varTypes);
 			String rightStr = processExpression(compExpr.getRight(), varTypes);
 
-			// Map Cypher's single '=' to Refinery's '=='
 			if ("=".equals(op)) op = "==";
 			else if ("<>".equals(op)) op = "!=";
 
-			// Generates e.g. Doctor::specialty({d}) == "Surgery"
 			return leftStr + " " + op + " " + rightStr;
 		}
 
@@ -414,7 +433,6 @@ public class RefineryModelTransformer {
 			String propName = propExpr.getPropertyLookups().get(0).getPropertyKeyName();
 			String type = varTypes.getOrDefault(varName, "Node");
 
-			// Attributes in Refinery are arity-1 functions: ClassName::propertyName(variable)
 			return type + "::" + propName + "({" + varName + "})";
 		}
 
@@ -433,7 +451,7 @@ public class RefineryModelTransformer {
 		}
 
 		if (expr instanceof StringLiteral strLit) {
-			return strLit.getValue(); // Already includes quotes
+			return strLit.getValue();
 		}
 
 		if (expr instanceof NumberLiteral numLit) {
@@ -441,14 +459,13 @@ public class RefineryModelTransformer {
 		}
 
 		if (expr instanceof BooleanLiteral boolLit) {
-			return boolLit.getValue().toLowerCase(); // true/false
+			return boolLit.getValue().toLowerCase();
 		}
 
 		if (expr instanceof ParenthesizedExpression parenExpr) {
 			return "(" + processExpression(parenExpr.getExpression(), varTypes) + ")";
 		}
 
-		// Fallback traversal for wrapper nodes
 		for (EObject child : expr.eContents()) {
 			String res = processExpression(child, varTypes);
 			if (res != null && !res.isEmpty()) {
@@ -468,9 +485,6 @@ public class RefineryModelTransformer {
 
 			while (m.find()) {
 				String varName = m.group(1);
-
-				// We no longer add an underscore. Refinery automatically treats
-				// variables not in the parameter list as local existential variables.
 				m.appendReplacement(sb, varName);
 			}
 			m.appendTail(sb);
