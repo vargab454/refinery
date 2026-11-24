@@ -1,21 +1,22 @@
 /*
- * openCypher Xtext - Slizaa Static Software Analysis Tools
- * Copyright © 2024 Code-Kontor GmbH and others (slizaa@codekontor.io)
+- openCypher Xtext - Slizaa Static Software Analysis Tools
+- Copyright © 2024 Code-Kontor GmbH and others (slizaa@codekontor.io)
  *
- * This program and the accompanying materials are made available under the
- * terms of the Eclipse Public License 2.0 which is available at
- * http://www.eclipse.org/legal/epl-2.0.
+- This program and the accompanying materials are made available under the
+- terms of the Eclipse Public License 2.0 which is available at
+- http://www.eclipse.org/legal/epl-2.0.
  *
- * SPDX-License-Identifier: EPL-2.0
+- SPDX-License-Identifier: EPL-2.0
  *
- * Contributors:
- *  Code-Kontor GmbH - initial API and implementation
+- Contributors:
+-  Code-Kontor GmbH - initial API and implementation
  */
 package io.codekontor.opencypher.xtext.transform;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,8 +31,8 @@ import org.eclipse.xtext.util.CancelIndicator;
 import io.codekontor.opencypher.xtext.openCypher.*;
 
 /**
- * Dedicated compiler component responsible for generating the structural
- * blueprint of the Refinery schema representation.
+ - Dedicated compiler component responsible for generating the structural
+ - blueprint of the Refinery schema representation.
  */
 public class RefineryModelTransformer {
 
@@ -39,20 +40,15 @@ public class RefineryModelTransformer {
 	private int constraintCounter = 1;
 	private int anonVarCounter = 1;
 
+	private record EndpointPair(String sourceType, String targetType) {}
+
 	private static class PatternInfo {
 		List<String> parameters = new ArrayList<>();
 		List<String> conditions = new ArrayList<>();
 		Map<String, String> varTypes = new LinkedHashMap<>();
 	}
 
-	private static class CheckInfo {
-		String name;
-		List<String> parameters;
-		CheckInfo(String name, List<String> parameters) {
-			this.name = name;
-			this.parameters = parameters;
-		}
-	}
+	private record CheckInfo(String name, List<String> parameters) {}
 
 	public String convertToRefinery(Cypher model, boolean isCwa) {
 		if (model == null) return "// Error: Model root container is empty.";
@@ -61,54 +57,14 @@ public class RefineryModelTransformer {
 		this.constraintCounter = 1;
 
 		StringBuilder out = new StringBuilder();
-		Set<String> errors = new HashSet<>();
-		Set<String> warnings = new HashSet<>();
+		appendValidationDiagnostics(model, out);
 
-		if (model.eResource() instanceof XtextResource xtextResource) {
-			IResourceServiceProvider serviceProvider = xtextResource.getResourceServiceProvider();
-			if (serviceProvider != null) {
-				IResourceValidator validator = serviceProvider.get(IResourceValidator.class);
-				if (validator != null) {
-					List<Issue> issues = validator.validate(xtextResource, CheckMode.ALL, CancelIndicator.NullImpl);
-					for (Issue issue : issues) {
-						String lineInfo = issue.getLineNumber() != null ? " (Line " + issue.getLineNumber() + ")" : "";
-						String issueText = issue.getMessage() + lineInfo;
+		out.append(isCwa ? "abstract class Node.\n\n" : "class Node.\n\n");
 
-						String severityName = issue.getSeverity() != null ? issue.getSeverity().name() : "";
-						if ("ERROR".equals(severityName)) {
-							errors.add(issueText);
-						} else if ("WARNING".equals(severityName)) {
-							warnings.add(issueText);
-						}
-					}
-				}
-			}
-		}
-
-		if (!errors.isEmpty() || !warnings.isEmpty()) {
-			if (!errors.isEmpty()) {
-				out.append("// --- Syntax / Semantic Errors ---\n");
-				for (String err : errors) {
-					out.append("// ERROR: ").append(err).append("\n");
-				}
-			}
-			if (!warnings.isEmpty()) {
-				out.append("// --- Warnings ---\n");
-				for (String warn : warnings) {
-					out.append("// WARNING: ").append(warn).append("\n");
-				}
-			}
-			out.append("// -------------------------------\n\n");
-		}
-
-		if (isCwa) {
-			out.append("abstract class Node.\n\n");
-		} else {
-			out.append("class Node.\n\n");
-		}
-
-		Set<String> explicitClasses = new HashSet<>();
-		Set<String> allReferencedTypes = new HashSet<>();
+		Set<String> explicitClasses = new LinkedHashSet<>();
+		Set<String> allReferencedTypes = new LinkedHashSet<>();
+		Set<String> explicitRelationships = new LinkedHashSet<>();
+		Set<String> allReferencedRelationships = new LinkedHashSet<>();
 		Map<String, List<String>> propagationRules = new LinkedHashMap<>();
 
 		for (Statement stmt : model.getStatements()) {
@@ -124,19 +80,26 @@ public class RefineryModelTransformer {
 			} else if (stmt instanceof RelationshipTypeDefinition rel) {
 				if (rel.getLeft() != null) explicitClasses.add(cleanName(rel.getLeft().getName()));
 				if (rel.getRight() != null) explicitClasses.add(cleanName(rel.getRight()));
+				if (rel.getRel() != null) explicitRelationships.add(cleanName(rel.getRel()));
 			}
 		}
 
-		List<NodeLabel> allLabels = EcoreUtil2.getAllContentsOfType(model, NodeLabel.class);
-		for (NodeLabel label : allLabels) {
+		for (NodeLabel label : EcoreUtil2.getAllContentsOfType(model, NodeLabel.class)) {
 			allReferencedTypes.add(cleanName(label.getLabelName()));
 		}
 		allReferencedTypes.addAll(explicitClasses);
 
+		List<RelationshipPattern> allRelPatterns = EcoreUtil2.getAllContentsOfType(model, RelationshipPattern.class);
+		for (RelationshipPattern relPattern : allRelPatterns) {
+			String relType = extractRelationshipTypeName(relPattern);
+			if (relType != null && !relType.isEmpty()) {
+				allReferencedRelationships.add(relType);
+			}
+		}
+		allReferencedRelationships.addAll(explicitRelationships);
+
 		StringBuilder classesBuffer = new StringBuilder();
 		StringBuilder relationshipsBuffer = new StringBuilder();
-		boolean hasRelationships = false;
-
 		Set<String> generatedClasses = new HashSet<>();
 
 		for (Statement statement : model.getStatements()) {
@@ -175,9 +138,7 @@ public class RefineryModelTransformer {
 				if (!predSupertypes.isEmpty()) {
 					propagationRules.put(className, predSupertypes);
 				}
-			}
-			else if (statement instanceof RelationshipTypeDefinition rel) {
-				hasRelationships = true;
+			} else if (statement instanceof RelationshipTypeDefinition rel) {
 				String sourceClass = rel.getLeft() != null ? cleanName(rel.getLeft().getName()) : "Node";
 				String targetClass = rel.getRight() != null ? cleanName(rel.getRight()) : "Node";
 				String relationName = cleanName(rel.getRel());
@@ -215,39 +176,160 @@ public class RefineryModelTransformer {
 
 			String ruleName = Character.toLowerCase(className.charAt(0)) + className.substring(1) + "ImpliedTypes";
 			out.append("propagation rule ").append(ruleName).append("(").append(className).append(" p) ==> ");
-
-			for (int i = 0; i < superTypes.size(); i++) {
-				out.append(superTypes.get(i)).append("(p)");
-				if (i < superTypes.size() - 1) out.append(", ");
-			}
+			out.append(String.join(", ", superTypes.stream().map(st -> st + "(p)").toList()));
 			out.append(".\n\n");
 		}
 
-		if (hasRelationships) {
-			out.append("abstract class RELATIONSHIP.\n\n");
-			out.append(relationshipsBuffer);
+		Map<String, Set<EndpointPair>> inferredRelEndpoints = new LinkedHashMap<>();
+		for (String relType : allReferencedRelationships) {
+			if (!explicitRelationships.contains(relType)) {
+				inferredRelEndpoints.put(relType, new LinkedHashSet<>());
+			}
 		}
 
-		processQueries(model, out);
-		processConstraints(model, out);
+		StringBuilder queriesAndConstraintsOut = new StringBuilder();
+		processQueries(model, queriesAndConstraintsOut, isCwa, explicitRelationships, inferredRelEndpoints);
+		processConstraints(model, queriesAndConstraintsOut, isCwa, explicitRelationships, inferredRelEndpoints);
+
+		boolean hasRelationships = !allReferencedRelationships.isEmpty() || !allRelPatterns.isEmpty();
+		if (hasRelationships) {
+			if (isCwa) {
+				out.append("abstract class RELATIONSHIP.\n\n");
+			} else {
+				out.append("class RELATIONSHIP {\n");
+				out.append("    Node[1] source\n");
+				out.append("    Node[1] target\n");
+				out.append("}\n\n");
+			}
+
+			out.append(relationshipsBuffer);
+
+			List<String> multiEndpointInferredRels = new ArrayList<>();
+			for (Map.Entry<String, Set<EndpointPair>> entry : inferredRelEndpoints.entrySet()) {
+				String relType = entry.getKey();
+				Set<EndpointPair> pairs = entry.getValue();
+
+				if (isCwa) {
+					if (pairs.size() == 1) {
+						EndpointPair onlyPair = pairs.iterator().next();
+						out.append("class ").append(relType).append(" extends RELATIONSHIP {\n");
+						out.append("    ").append(onlyPair.sourceType()).append("[1] source\n");
+						out.append("    ").append(onlyPair.targetType()).append("[1] target\n");
+						out.append("}\n\n");
+					} else {
+						out.append("class ").append(relType).append(" extends RELATIONSHIP {\n");
+						out.append("    Node[1] source\n");
+						out.append("    Node[1] target\n");
+						out.append("}\n\n");
+						if (!pairs.isEmpty()) {
+							multiEndpointInferredRels.add(relType);
+						}
+					}
+				} else {
+					out.append("pred ").append(relType).append("(RELATIONSHIP r).\n\n");
+				}
+			}
+
+			if (isCwa && !multiEndpointInferredRels.isEmpty()) {
+				appendCwaInferredEndpointRestrictions(out, multiEndpointInferredRels, inferredRelEndpoints);
+			}
+		}
+
+		out.append(queriesAndConstraintsOut);
 
 		return out.toString().trim() + "\n";
 	}
 
-	private void processQueries(Cypher model, StringBuilder out) {
-		List<Match> matchClauses = EcoreUtil2.getAllContentsOfType(model, Match.class);
-		for (Match match : matchClauses) {
-			processMatchPattern(match.getPattern(), match.getWhere(), out);
+	private void appendCwaInferredEndpointRestrictions(
+			StringBuilder out,
+			List<String> relTypes,
+			Map<String, Set<EndpointPair>> inferredRelEndpoints) {
+		for (String relType : relTypes) {
+			Set<EndpointPair> pairs = inferredRelEndpoints.get(relType);
+			String validPredName = "valid" + relType;
+
+			List<String> branches = new ArrayList<>();
+			for (EndpointPair pair : pairs) {
+				branches.add("    " + relType + "::source(r, s), " + relType + "::target(r, t), "
+						+ pair.sourceType() + "(s), " + pair.targetType() + "(t)");
+			}
+
+			out.append("pred ").append(validPredName).append("(").append(relType).append(" r, Node s, Node t) <-> \n");
+			out.append(String.join(" ; \n", branches));
+			out.append(".\n\n");
+
+			out.append("error invalid").append(relType).append("(").append(relType).append(" r, Node s, Node t) <-> \n");
+			out.append("    ").append(relType).append("::source(r, s), \n");
+			out.append("    ").append(relType).append("::target(r, t), \n");
+			out.append("    !").append(validPredName).append("(r, s, t).\n\n");
 		}
 	}
 
-	private void processConstraints(Cypher model, StringBuilder out) {
+	private void appendValidationDiagnostics(Cypher model, StringBuilder out) {
+		if (!(model.eResource() instanceof XtextResource xtextResource)) return;
+
+		IResourceServiceProvider serviceProvider = xtextResource.getResourceServiceProvider();
+		if (serviceProvider == null) return;
+
+		IResourceValidator validator = serviceProvider.get(IResourceValidator.class);
+		if (validator == null) return;
+
+		Set<String> errors = new LinkedHashSet<>();
+		Set<String> warnings = new LinkedHashSet<>();
+
+		List<Issue> issues = validator.validate(xtextResource, CheckMode.ALL, CancelIndicator.NullImpl);
+		for (Issue issue : issues) {
+			String lineInfo = issue.getLineNumber() != null ? " (Line " + issue.getLineNumber() + ")" : "";
+			String issueText = issue.getMessage() + lineInfo;
+			String severityName = issue.getSeverity() != null ? issue.getSeverity().name() : "";
+
+			if ("ERROR".equals(severityName)) {
+				errors.add(issueText);
+			} else if ("WARNING".equals(severityName)) {
+				warnings.add(issueText);
+			}
+		}
+
+		if (!errors.isEmpty() || !warnings.isEmpty()) {
+			if (!errors.isEmpty()) {
+				out.append("// --- Syntax / Semantic Errors ---\n");
+				for (String err : errors) {
+					out.append("// ERROR: ").append(err).append("\n");
+				}
+			}
+			if (!warnings.isEmpty()) {
+				out.append("// --- Warnings ---\n");
+				for (String warn : warnings) {
+					out.append("// WARNING: ").append(warn).append("\n");
+				}
+			}
+			out.append("// -------------------------------\n\n");
+		}
+	}
+
+	private void processQueries(
+			Cypher model,
+			StringBuilder out,
+			boolean isCwa,
+			Set<String> explicitRelationships,
+			Map<String, Set<EndpointPair>> inferredRelEndpoints) {
+		for (Match match : EcoreUtil2.getAllContentsOfType(model, Match.class)) {
+			processMatchPattern(match.getPattern(), match.getWhere(), out, isCwa, explicitRelationships, inferredRelEndpoints);
+		}
+	}
+
+	private void processConstraints(
+			Cypher model,
+			StringBuilder out,
+			boolean isCwa,
+			Set<String> explicitRelationships,
+			Map<String, Set<EndpointPair>> inferredRelEndpoints) {
 		List<ConstraintStatement> constraints = EcoreUtil2.getAllContentsOfType(model, ConstraintStatement.class);
 		List<CheckInfo> checkInfos = new ArrayList<>();
 
 		for (ConstraintStatement stmt : constraints) {
-			PatternInfo cInfo = extractPatternInfo(stmt.getConstraintPattern(), stmt.getConstraintWhere());
-			PatternInfo iInfo = extractPatternInfo(stmt.getImpliesPattern(), stmt.getImpliesWhere());
+			PatternInfo cInfo = extractPatternInfo(stmt.getConstraintPattern(), stmt.getConstraintWhere(), isCwa, explicitRelationships, inferredRelEndpoints, null);
+			PatternInfo iInfo = extractPatternInfo(stmt.getImpliesPattern(), stmt.getImpliesWhere(), isCwa, explicitRelationships, inferredRelEndpoints, cInfo.varTypes);
 
 			for (String param : cInfo.parameters) {
 				if (!iInfo.parameters.contains(param)) {
@@ -262,13 +344,13 @@ public class RefineryModelTransformer {
 			out.append("pred constraint").append(currentId).append("(");
 			appendParameterDeclarations(out, cInfo.parameters);
 			out.append(") <-> \n");
-			appendConditions(out, cInfo.conditions, cInfo.parameters);
+			appendConditions(out, cInfo.conditions);
 			out.append(".\n\n");
 
 			out.append("pred implication").append(currentId).append("(");
 			appendParameterDeclarations(out, cInfo.parameters);
 			out.append(") <-> \n");
-			appendConditions(out, iInfo.conditions, cInfo.parameters);
+			appendConditions(out, iInfo.conditions);
 			out.append(".\n\n");
 
 			out.append("pred ").append(checkName).append("(");
@@ -287,10 +369,7 @@ public class RefineryModelTransformer {
 			for (int i = 0; i < checkInfos.size(); i++) {
 				CheckInfo info = checkInfos.get(i);
 				out.append("    !").append(info.name).append("(");
-				for (int j = 0; j < info.parameters.size(); j++) {
-					out.append("_");
-					if (j < info.parameters.size() - 1) out.append(", ");
-				}
+				out.append(String.join(", ", info.parameters.stream().map(p -> "_").toList()));
 				out.append(")");
 				if (i < checkInfos.size() - 1) {
 					out.append(" ; \n");
@@ -300,8 +379,17 @@ public class RefineryModelTransformer {
 		}
 	}
 
-	private PatternInfo extractPatternInfo(Pattern pattern, Where where) {
+	private PatternInfo extractPatternInfo(
+			Pattern pattern,
+			Where where,
+			boolean isCwa,
+			Set<String> explicitRelationships,
+			Map<String, Set<EndpointPair>> inferredRelEndpoints,
+			Map<String, String> inheritedVarTypes) {
 		PatternInfo info = new PatternInfo();
+		if (inheritedVarTypes != null) {
+			info.varTypes.putAll(inheritedVarTypes);
+		}
 		if (pattern == null || pattern.getPatterns().isEmpty()) return info;
 
 		anonVarCounter = 1;
@@ -318,7 +406,7 @@ public class RefineryModelTransformer {
 				String sourceVar = processNodePattern(pe.getNodepattern(), info.parameters, info.conditions, info.varTypes);
 				for (PatternElementChain chain : pe.getChain()) {
 					String targetVar = processNodePattern(chain.getNodePattern(), info.parameters, info.conditions, info.varTypes);
-					processRelationshipPattern(chain.getRelationshipPattern(), sourceVar, targetVar, info.conditions, info.varTypes);
+					processRelationshipPattern(chain.getRelationshipPattern(), sourceVar, targetVar, info.conditions, info.varTypes, isCwa, explicitRelationships, inferredRelEndpoints);
 					sourceVar = targetVar;
 				}
 			}
@@ -331,14 +419,20 @@ public class RefineryModelTransformer {
 		return info;
 	}
 
-	private void processMatchPattern(Pattern pattern, Where where, StringBuilder out) {
-		PatternInfo info = extractPatternInfo(pattern, where);
+	private void processMatchPattern(
+			Pattern pattern,
+			Where where,
+			StringBuilder out,
+			boolean isCwa,
+			Set<String> explicitRelationships,
+			Map<String, Set<EndpointPair>> inferredRelEndpoints) {
+		PatternInfo info = extractPatternInfo(pattern, where, isCwa, explicitRelationships, inferredRelEndpoints, null);
 		if (info.parameters.isEmpty() && info.conditions.isEmpty()) return;
 
 		out.append("pred match").append(matchCounter++).append("(");
 		appendParameterDeclarations(out, info.parameters);
 		out.append(") <-> \n");
-		appendConditions(out, info.conditions, info.parameters);
+		appendConditions(out, info.conditions);
 		out.append(".\n\n");
 	}
 
@@ -350,7 +444,7 @@ public class RefineryModelTransformer {
 		}
 
 		if (nodePattern.getNodeLabels() != null && !nodePattern.getNodeLabels().isEmpty()) {
-			varTypes.put(varName, cleanName(nodePattern.getNodeLabels().get(0).getLabelName()));
+			varTypes.put(varName, cleanName(nodePattern.getNodeLabels().getFirst().getLabelName()));
 			for (NodeLabel label : nodePattern.getNodeLabels()) {
 				conditions.add(cleanName(label.getLabelName()) + "({" + varName + "})");
 			}
@@ -360,32 +454,64 @@ public class RefineryModelTransformer {
 		return varName;
 	}
 
-	private void processRelationshipPattern(RelationshipPattern relPattern, String sourceVar, String targetVar, List<String> conditions, Map<String, String> varTypes) {
+	private String extractRelationshipTypeName(RelationshipPattern relPattern) {
+		if (relPattern == null || relPattern.getDetail() == null) return null;
+		RelationshipDetail detail = relPattern.getDetail();
+		if (detail.getRelTypeNames() != null && !detail.getRelTypeNames().isEmpty()) {
+			return cleanName(detail.getRelTypeNames().getFirst());
+		} else if (detail.getVariable() != null) {
+			return cleanName(detail.getVariable().getName());
+		}
+		return null;
+	}
+
+	private void processRelationshipPattern(
+			RelationshipPattern relPattern,
+			String sourceVar,
+			String targetVar,
+			List<String> conditions,
+			Map<String, String> varTypes,
+			boolean isCwa,
+			Set<String> explicitRelationships,
+			Map<String, Set<EndpointPair>> inferredRelEndpoints) {
 		if (relPattern.getDetail() != null) {
 			RelationshipDetail detail = relPattern.getDetail();
-			String relType = null;
+			String relType = extractRelationshipTypeName(relPattern);
 			String relVar = null;
 
 			if (detail.getRelTypeNames() != null && !detail.getRelTypeNames().isEmpty()) {
-				relType = cleanName(detail.getRelTypeNames().getFirst());
 				relVar = detail.getVariable() != null ? detail.getVariable().getName() : "relationship" + (anonVarCounter++);
 			} else if (detail.getVariable() != null) {
-				relType = cleanName(detail.getVariable().getName());
 				relVar = "relationship" + (anonVarCounter++);
 			}
 
 			if (relType != null) {
-				varTypes.put(relVar, relType);
-				conditions.add(relType + "({" + relVar + "})");
+				String effectiveSourceVar = relPattern.isIncoming() ? targetVar : sourceVar;
+				String effectiveTargetVar = relPattern.isIncoming() ? sourceVar : targetVar;
 
-				if (relPattern.isIncoming()) {
-					conditions.add(relType + "::source({" + relVar + "}, {" + targetVar + "})");
-					conditions.add(relType + "::target({" + relVar + "}, {" + sourceVar + "})");
-				} else {
-					conditions.add(relType + "::source({" + relVar + "}, {" + sourceVar + "})");
-					conditions.add(relType + "::target({" + relVar + "}, {" + targetVar + "})");
+				boolean isStructuralRel = isCwa || explicitRelationships.contains(relType);
+				String endpointOwner = isStructuralRel ? relType : "RELATIONSHIP";
+
+				varTypes.put(relVar, endpointOwner);
+				conditions.add(relType + "({" + relVar + "})");
+				conditions.add(endpointOwner + "::source({" + relVar + "}, {" + effectiveSourceVar + "})");
+				conditions.add(endpointOwner + "::target({" + relVar + "}, {" + effectiveTargetVar + "})");
+
+				if (inferredRelEndpoints.containsKey(relType)) {
+					String srcType = varTypes.getOrDefault(effectiveSourceVar, "Node");
+					String tgtType = varTypes.getOrDefault(effectiveTargetVar, "Node");
+					inferredRelEndpoints.get(relType).add(new EndpointPair(srcType, tgtType));
 				}
 			}
+		} else if (!isCwa) {
+			String relVar = "relationship" + (anonVarCounter++);
+			String effectiveSourceVar = relPattern.isIncoming() ? targetVar : sourceVar;
+			String effectiveTargetVar = relPattern.isIncoming() ? sourceVar : targetVar;
+
+			varTypes.put(relVar, "RELATIONSHIP");
+			conditions.add("RELATIONSHIP({" + relVar + "})");
+			conditions.add("RELATIONSHIP::source({" + relVar + "}, {" + effectiveSourceVar + "})");
+			conditions.add("RELATIONSHIP::target({" + relVar + "}, {" + effectiveTargetVar + "})");
 		}
 	}
 
@@ -415,9 +541,11 @@ public class RefineryModelTransformer {
 	}
 
 	private String processExpression(EObject expr, Map<String, String> varTypes) {
-		if (expr == null) return "";
-
-		if (expr instanceof ComparisonExpression compExpr) {
+		switch (expr) {
+		case null -> {
+			return "";
+		}
+		case ComparisonExpression compExpr -> {
 			String op = compExpr.getOperator();
 			String leftStr = processExpression(compExpr.getLeft(), varTypes);
 			String rightStr = processExpression(compExpr.getRight(), varTypes);
@@ -427,43 +555,37 @@ public class RefineryModelTransformer {
 
 			return leftStr + " " + op + " " + rightStr;
 		}
-
-		if (expr instanceof PropertyLookupExpression propExpr) {
+		case PropertyLookupExpression propExpr -> {
 			String varName = getVariableName(propExpr.getLeft());
-			String propName = propExpr.getPropertyLookups().get(0).getPropertyKeyName();
+			String propName = propExpr.getPropertyLookups().getFirst().getPropertyKeyName();
 			String type = varTypes.getOrDefault(varName, "Node");
 
 			return type + "::" + propName + "({" + varName + "})";
 		}
-
-		if (expr instanceof OrExpression orExpr) {
+		case OrExpression orExpr -> {
 			return "(" + processExpression(orExpr.getLeft(), varTypes) + " ; " + processExpression(orExpr.getRight(), varTypes) + ")";
 		}
-
-		if (expr instanceof NotExpression notExpr) {
+		case NotExpression notExpr -> {
 			return "!(" + processExpression(notExpr.getLeft(), varTypes) + ")";
 		}
-
-		if (expr instanceof VariableRef varRef) {
+		case VariableRef varRef -> {
 			if (varRef.getVariableName() != null) {
 				return "{" + varRef.getVariableName() + "}";
 			}
 		}
-
-		if (expr instanceof StringLiteral strLit) {
+		case StringLiteral strLit -> {
 			return strLit.getValue();
 		}
-
-		if (expr instanceof NumberLiteral numLit) {
+		case NumberLiteral numLit -> {
 			return numLit.getValue();
 		}
-
-		if (expr instanceof BooleanLiteral boolLit) {
+		case BooleanLiteral boolLit -> {
 			return boolLit.getValue().toLowerCase();
 		}
-
-		if (expr instanceof ParenthesizedExpression parenExpr) {
+		case ParenthesizedExpression parenExpr -> {
 			return "(" + processExpression(parenExpr.getExpression(), varTypes) + ")";
+		}
+		default -> {}
 		}
 
 		for (EObject child : expr.eContents()) {
@@ -476,7 +598,7 @@ public class RefineryModelTransformer {
 		return "";
 	}
 
-	private void appendConditions(StringBuilder out, List<String> conditions, List<String> exportedParams) {
+	private void appendConditions(StringBuilder out, List<String> conditions) {
 		java.util.regex.Pattern p = java.util.regex.Pattern.compile("\\{([^}]+)}");
 		for (int i = 0; i < conditions.size(); i++) {
 			String cond = conditions.get(i);
@@ -504,10 +626,7 @@ public class RefineryModelTransformer {
 	}
 
 	private void appendParameterArguments(StringBuilder out, List<String> params) {
-		for (int i = 0; i < params.size(); i++) {
-			out.append(params.get(i));
-			if (i < params.size() - 1) out.append(", ");
-		}
+		out.append(String.join(", ", params));
 	}
 
 	private void appendProperties(StringBuilder buffer, TypePropertyMap propertyMap) {
